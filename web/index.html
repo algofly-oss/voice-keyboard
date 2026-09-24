@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e1f22">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Voice Keyboard">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235865f2'/%3E%3Cpath d='M16 7a3.5 3.5 0 0 0-3.5 3.5v5a3.5 3.5 0 0 0 7 0v-5A3.5 3.5 0 0 0 16 7Zm-7 8.5a7 7 0 0 0 14 0M16 22.5V25' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<title>Voice Keyboard</title>
+<style>
+:root{
+  --bg:#1e1f22;--surface:#2b2d31;--surface-2:#313338;--elevated:#383a40;--input:#1e1f22;
+  --border:#3f4147;--border-soft:rgba(255,255,255,.06);
+  --text:#f2f3f5;--muted:#b5bac1;--subtle:#80848e;
+  --accent:#5865f2;--accent-hover:#4752c4;--accent-soft:rgba(88,101,242,.16);
+  --danger:#f23f43;--danger-soft:rgba(242,63,67,.14);--success:#23a55a;--success-soft:rgba(35,165,90,.14);--warning:#f0b232;
+  --radius:12px;--radius-sm:8px;--ease:cubic-bezier(.2,.8,.2,1);
+  --shadow:0 8px 24px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",Roboto,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[tabindex="-1"]:focus{outline:none}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.app{height:100vh;height:100dvh;max-width:480px;margin:0 auto;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
+  padding:calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px)}
+
+.topbar{display:flex;align-items:center;gap:8px;padding:4px 0}
+.topbar .chips{flex:1;min-width:0}
+.icon-btn{width:44px;height:44px;border-radius:var(--radius);border:1px solid var(--border-soft);background:var(--surface);color:var(--muted);display:grid;place-items:center;transition:background .15s,color .15s,transform .1s}
+.icon-btn:hover{background:var(--elevated);color:var(--text)}
+.icon-btn:active{transform:scale(.94)}
+.icon-btn.round{width:36px;height:36px;border-radius:999px;flex:none}
+.icon-btn.round svg.i{width:18px;height:18px}
+.about{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;padding:12px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft);font-size:14px}
+.about dt{color:var(--subtle)}.about dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;color:var(--text);overflow-wrap:anywhere}
+
+/* Status icons: the color is the state; the tooltip / label has the details. */
+.chips{display:flex;gap:2px}
+.chips{align-items:center}
+.chip{position:relative;width:32px;height:36px;color:var(--subtle);display:grid;place-items:center;transition:color .2s}
+.chip svg.i{width:19px;height:19px}
+.chip[data-state=ok]{color:var(--muted)}  /* same gray as the settings icon */
+.chip[data-state=bad],.chip[data-state=off]{color:var(--danger)}
+.chip[data-state=wait]{color:var(--warning);animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.35}}
+
+/* Equal rows above and below keep the mic at the exact center; the top padding
+   offsets the key row being taller than the header, centering it on screen. */
+/* Equal rows above and below keep the mic at the exact center; the top padding
+   offsets the key row being taller than the header, centering it on screen. */
+.stage{display:grid;grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);justify-items:center;padding:28px 0 0;text-align:center;min-height:0}
+.stage .above{align-self:end;padding-bottom:12px}
+.stage .below{align-self:start;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:10px;width:100%}
+.mic-row{position:relative;display:grid;place-items:center}
+.mic-wrap{position:relative;width:168px;height:168px;display:grid;place-items:center}
+.halo{position:absolute;inset:20px;border-radius:50%;background:var(--accent);opacity:0;transform:scale(1);transition:opacity .3s,background .3s}
+.recording .halo{opacity:.18;background:var(--danger)}
+.pulse{position:absolute;inset:20px;border-radius:50%;border:2px solid var(--danger);opacity:0}
+.recording .pulse{animation:pulse 2s var(--ease) infinite}
+.recording .pulse.p2{animation-delay:1s}
+@keyframes pulse{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.45);opacity:0}}
+.mic{position:relative;width:128px;height:128px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center;
+  box-shadow:0 10px 30px rgba(88,101,242,.4),inset 0 1px 0 rgba(255,255,255,.18);transition:background .25s,box-shadow .25s,transform .15s var(--ease)}
+.mic:hover{background:var(--accent-hover)}
+.mic:active{transform:scale(.95)}
+.mic svg.i{width:48px;height:48px;stroke-width:1.75;transition:transform .25s var(--ease),opacity .2s}
+.mic .stop{position:absolute;opacity:0;transform:scale(.5)}
+.recording .mic{background:var(--danger);box-shadow:0 10px 30px rgba(242,63,67,.4),inset 0 1px 0 rgba(255,255,255,.18)}
+.recording .mic .mic-i{opacity:0;transform:scale(.5)}
+.recording .mic .stop{opacity:1;transform:scale(1)}
+.recording .mic .stop{fill:#fff;stroke:none;width:40px;height:40px}
+.busy .mic{background:var(--elevated);box-shadow:none;cursor:progress}
+.busy .mic .mic-i{opacity:0}
+.spinner{position:absolute;width:56px;height:56px;border-radius:50%;border:3px solid rgba(255,255,255,.15);border-top-color:#fff;opacity:0;transition:opacity .2s}
+.busy .spinner{opacity:1;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.timer{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--muted);height:22px;opacity:0;transition:opacity .2s}
+.recording .timer,.busy .timer{opacity:1}
+.wave{display:flex;align-items:center;justify-content:center;gap:3px;height:32px;width:220px}
+.wave span{width:4px;height:32px;border-radius:2px;background:var(--subtle);opacity:.35;transform:scaleY(.1);transition:transform .08s linear,background .3s,opacity .3s}
+.recording .wave span{background:var(--danger);opacity:.9}
+.status{margin:0;min-height:24px;color:var(--muted);font-size:15px;max-width:320px}
+.status.error{color:#ff8a8d}
+/* Newest words stay pinned to the bottom; older lines fade out at the top. */
+.caption{margin:0;width:100%;max-width:360px;height:calc(17px*1.4*2);font-size:17px;line-height:1.4;font-weight:500;color:var(--text);text-align:center;
+  display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;transition:opacity .3s;
+  -webkit-mask-image:linear-gradient(to bottom,transparent,#000 35%);mask-image:linear-gradient(to bottom,transparent,#000 35%)}
+.caption.empty{opacity:0}
+.caption .new{animation:rise .35s var(--ease)}
+@keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.app:not(.recording):not(.busy) .caption{color:var(--muted)}
+.discard{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;font-weight:550;
+  opacity:0;pointer-events:none;transform:translateY(-4px);transition:opacity .2s,transform .2s var(--ease),background .15s}
+.discard svg.i{width:16px;height:16px}
+.recording .discard{opacity:1;pointer-events:auto;transform:none}
+.discard:hover{background:var(--surface)}
+
+.keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
+.keys.locked .key{opacity:.35}
+/* Arrow pad, MacBook style: full-height left/right, half-height up/down stacked
+   in the middle, all in the same 68 px footprint as the other keys. */
+.dpad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:4px;height:68px}
+.dpad .key{height:auto;min-width:0;padding:0;border-radius:10px}  /* no browser padding: all four exactly equal width */
+.dpad .key svg.i{width:18px;height:18px}
+.dpad .left{grid-area:1/1/3/2}.dpad .up{grid-area:1/2}.dpad .down{grid-area:2/2}.dpad .right{grid-area:1/3/3/4}
+.dpad .up,.dpad .down{border-radius:8px}
+.key{height:68px;border-radius:16px;border:1px solid var(--border-soft);background:var(--surface);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:600;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;transition:background .12s,transform .12s var(--ease),border-color .12s}
+.key svg.i{width:22px;height:22px;color:var(--muted);transition:color .12s}
+.key:hover{background:var(--surface-2)}
+.key.pressed,.key:active{background:var(--elevated);transform:scale(.97);border-color:var(--border)}
+.key.pressed svg.i{color:var(--text)}
+.key:disabled{opacity:.45;cursor:not-allowed}
+
+.icon-btn.off{border-color:var(--accent);background:var(--accent-soft);color:#aab2ff}
+
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 100px);z-index:20;width:min(440px,calc(100% - 32px));display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius);
+  background:var(--elevated);border:1px solid var(--border);box-shadow:var(--shadow);font-size:15px;opacity:0;pointer-events:none;transform:translate(-50%,12px) scale(.98);transition:opacity .2s,transform .25s var(--ease)}
+.toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.toast svg.i{color:var(--success)}.toast.error svg.i{color:var(--danger)}
+.toast .msg{flex:1}
+.toast button{border:0;background:var(--accent);color:#fff;font-weight:600;font-size:14px;height:32px;padding:0 12px;border-radius:var(--radius-sm)}
+
+/* Settings sheet */
+.sheet{padding:0;border:0;background:transparent;max-width:none;max-height:none;width:100%;height:100%;margin:0;color:var(--text);overflow:hidden}
+.sheet::backdrop{background:rgba(0,0,0,0)}
+.sheet .scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);opacity:0;transition:opacity .28s}
+.sheet.open .scrim{opacity:1}
+.panel{position:fixed;left:0;right:0;bottom:0;margin:0 auto;max-width:520px;max-height:min(88dvh,720px);display:flex;flex-direction:column;
+  background:var(--surface-2);border:1px solid var(--border-soft);border-bottom:0;border-radius:20px 20px 0 0;box-shadow:var(--shadow);transform:translateY(100%);transition:transform .32s var(--ease)}
+.sheet.open .panel{transform:translateY(var(--drag,0px))}
+.sheet.dragging .panel{transition:none}
+.grab{padding:10px 0 2px;display:grid;place-items:center;touch-action:none;cursor:grab}
+.grab span{width:40px;height:5px;border-radius:3px;background:var(--border)}
+.sheet-head{display:flex;align-items:center;gap:12px;padding:6px 16px 12px;touch-action:none}
+.sheet-head h2{flex:1;margin:0;font-size:18px;font-weight:650}
+.tabs{position:relative;display:grid;grid-template-columns:repeat(3,1fr);margin:0 16px;padding:4px;border-radius:var(--radius);background:var(--bg)}
+.tabs button{position:relative;z-index:1;height:36px;border:0;background:none;color:var(--muted);font-size:14px;font-weight:600;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;gap:6px;transition:color .2s}
+.tabs button svg.i{width:16px;height:16px}
+.tabs button[aria-selected=true]{color:var(--text)}
+.tab-pill{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:var(--radius-sm);background:var(--elevated);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .3s var(--ease)}
+.sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:18px 16px 8px;-webkit-overflow-scrolling:touch}
+.pane{display:flex;flex-direction:column;gap:18px;animation:fade .25s var(--ease)}
+.pane[hidden]{display:none}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.field{display:flex;flex-direction:column;gap:8px}
+.field>label,.field>.label{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.hint{margin:0;font-size:13px;color:var(--subtle)}
+input[type=text],input[type=password],input[type=url],select,textarea{width:100%;height:46px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--input);color:var(--text);
+  font-size:16px;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}
+textarea{height:auto;min-height:84px;padding:10px 12px;resize:vertical;line-height:1.4}
+select{padding-right:40px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b5bac1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:18px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+input::placeholder,textarea::placeholder{color:var(--subtle)}
+.input-group{position:relative}
+.input-group input{padding-right:48px}
+.input-group button{position:absolute;right:4px;top:4px;width:38px;height:38px;border:0;border-radius:6px;background:none;color:var(--muted);display:grid;place-items:center}
+.segmented{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:var(--radius);background:var(--bg)}
+.segmented label{position:relative}
+.segmented input{position:absolute;opacity:0;inset:0}
+.segmented span{height:38px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;font-weight:600;color:var(--muted);transition:background .2s,color .2s}
+.segmented span svg.i{width:16px;height:16px}
+.segmented input:checked+span{background:var(--elevated);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.segmented input:focus-visible+span{outline:2px solid var(--accent);outline-offset:1px}
+details{border:1px solid var(--border-soft);border-radius:var(--radius);background:var(--surface)}
+summary{list-style:none;display:flex;align-items:center;gap:8px;padding:12px 14px;font-weight:600;font-size:15px;color:var(--muted);cursor:pointer}
+summary::-webkit-details-marker{display:none}
+summary svg.i{margin-left:auto;transition:transform .2s var(--ease)}
+details[open] summary svg.i{transform:rotate(180deg)}
+details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px}
+.switch-row{display:flex;align-items:center;gap:14px;padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft);cursor:pointer}
+.switch-row .text{flex:1;display:flex;flex-direction:column;gap:2px}
+.switch-row .title{font-size:16px;font-weight:600;color:var(--text)}
+.switch-row .hint{font-size:13px}
+.switch{position:relative;flex:none;width:51px;height:31px}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.switch .track{position:absolute;inset:0;border-radius:999px;background:var(--border);transition:background .2s}
+.switch .thumb{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.3);transition:transform .25s var(--ease)}
+.switch input:checked~.track{background:var(--success)}
+.switch input:checked~.thumb{transform:translateX(20px)}
+.switch input:focus-visible~.track{outline:2px solid var(--accent);outline-offset:2px}
+.callout{display:flex;gap:10px;padding:12px;border-radius:var(--radius);background:rgba(240,178,50,.1);color:#f5d08a;font-size:14px}
+.callout svg.i{width:18px;height:18px;margin-top:1px}
+.test-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.test-result{font-size:14px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.test-result.ok{color:#5fd08f}.test-result.bad{color:#ff8a8d}
+.sheet-foot{padding:12px 16px calc(env(safe-area-inset-bottom) + 16px);border-top:1px solid var(--border-soft);background:var(--surface-2)}
+.btn{height:48px;padding:0 18px;border-radius:var(--radius);border:1px solid transparent;font-size:16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,opacity .15s,transform .1s}
+.btn:active{transform:scale(.98)}
+.btn.primary{width:100%;background:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.primary:disabled{opacity:.5;cursor:default;transform:none}
+.btn.secondary{height:40px;font-size:14px;background:var(--elevated);color:var(--text);border-color:var(--border)}
+.btn svg.i{width:18px;height:18px}
+
+@media (max-height:700px){.mic-wrap{width:160px;height:160px}.mic{width:120px;height:120px}.mic svg.i{width:42px;height:42px}.halo,.pulse{inset:20px}.stage{padding-top:12px}.stage .below{gap:4px;padding-top:6px}.wave{height:24px}.wave span{height:24px}}
+@media (min-width:640px){
+  .panel{top:50%;bottom:auto;border-radius:20px;border:1px solid var(--border-soft);transform:translateY(-46%) scale(.96);opacity:0;transition:transform .28s var(--ease),opacity .2s}
+  .sheet.open .panel{transform:translateY(-50%);opacity:1}
+  .grab{display:none}.sheet-head{padding-top:16px}
+  .sheet-foot{border-radius:0 0 20px 20px}
+}
+/* Login */
+.login{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .25s}
+.login.show{opacity:1;pointer-events:auto}
+.login form{width:min(340px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.login .badge{width:64px;height:64px;border-radius:20px;background:var(--accent);color:#fff;display:grid;place-items:center;box-shadow:0 10px 30px rgba(88,101,242,.4);margin-bottom:6px}
+.login .badge svg.i{width:30px;height:30px}
+.login h2{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.login p{margin:0 0 6px;color:var(--muted);font-size:15px}
+.login .input-group{width:100%}
+.login .btn.primary{margin-top:2px}
+.login .error{min-height:20px;color:#ff8a8d;font-size:14px}
+.shake{animation:shake .4s}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="topbar">
+    <h1 class="sr-only">Voice Keyboard</h1>
+    <div class="chips">
+      <span class="chip" id="bleChip" data-state="wait" role="img" aria-label="Keyboard status"><i data-i="bluetooth"></i></span>
+      <span class="chip" id="serverChip" data-state="wait" role="img" aria-label="Server status"><i data-i="server"></i></span>
+      <button class="icon-btn round" id="bluetooth" aria-pressed="false"><i data-i="keyboardOff"></i></button>
+    </div>
+    <button class="icon-btn round" id="openSettings" aria-label="Settings" aria-haspopup="dialog"><i data-i="settings"></i></button>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="above"><div class="timer" id="timer" aria-hidden="true">0:00</div></div>
+    <div class="mic-row">
+      <div class="mic-wrap">
+        <div class="halo" id="halo"></div><div class="pulse"></div><div class="pulse p2"></div>
+        <button class="mic" id="mic" aria-label="Start dictation" aria-pressed="false">
+          <i data-i="mic" class="mic-i"></i><i data-i="square" class="stop"></i><span class="spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+    <div class="below">
+      <div class="wave" id="wave" aria-hidden="true"></div>
+      <p class="status" id="status" aria-live="polite">Tap the microphone to dictate</p>
+      <p class="caption empty" id="caption" aria-live="polite" aria-label="Recognized text"><span class="inner"></span></p>
+      <button class="discard" id="discard" tabindex="-1" aria-hidden="true"><i data-i="x"></i>Discard</button>
+    </div>
+  </main>
+
+  <nav class="keys" aria-label="Keys">
+    <button class="key" data-key="backspace" aria-label="Backspace. Hold to repeat."><i data-i="delete"></i>Backspace</button>
+    <div class="dpad" role="group" aria-label="Arrow keys. Hold to repeat.">
+      <button class="key up" data-key="up" aria-label="Up"><i data-i="up"></i></button>
+      <button class="key left" data-key="left" aria-label="Left"><i data-i="left"></i></button>
+      <button class="key down" data-key="down" aria-label="Down"><i data-i="down"></i></button>
+      <button class="key right" data-key="right" aria-label="Right"><i data-i="right"></i></button>
+    </div>
+    <button class="key" id="enter" aria-label="Enter"><i data-i="enter"></i>Enter</button>
+  </nav>
+</div>
+
+<div class="login" id="login" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+  <form id="loginForm" autocomplete="on">
+    <div class="badge" aria-hidden="true"><i data-i="mic"></i></div>
+    <h2 id="loginTitle">Voice Keyboard</h2>
+    <p>Enter the password to continue</p>
+    <input type="text" name="username" value="voice-keyboard" autocomplete="username" hidden>
+    <div class="input-group"><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required>
+      <button type="button" data-reveal="loginPassword" aria-label="Show password" aria-pressed="false"><i data-i="eye"></i></button></div>
+    <button class="btn primary" id="loginButton">Unlock</button>
+    <div class="error" id="loginError" aria-live="assertive"></div>
+  </form>
+</div>
+
+<div class="toast" id="toast" role="alert" aria-live="assertive"><i data-i="check"></i><span class="msg"></span></div>
+
+<dialog class="sheet" id="sheet" aria-labelledby="sheetTitle">
+  <div class="scrim" data-close></div>
+  <div class="panel" id="panel">
+    <div class="grab" id="grab"><span></span></div>
+    <div class="sheet-head" id="sheetHead"><h2 id="sheetTitle" tabindex="-1" autofocus>Settings</h2><button class="icon-btn" data-close aria-label="Close settings"><i data-i="x"></i></button></div>
+    <div class="tabs" role="tablist" aria-label="Settings sections">
+      <span class="tab-pill" id="tabPill"></span>
+      <button role="tab" id="tab-general" aria-controls="pane-general" aria-selected="true"><i data-i="sliders"></i>General</button>
+      <button role="tab" id="tab-server" aria-controls="pane-server" aria-selected="false" tabindex="-1"><i data-i="server"></i>Server</button>
+      <button role="tab" id="tab-device" aria-controls="pane-device" aria-selected="false" tabindex="-1"><i data-i="cpu"></i>Device</button>
+    </div>
+    <form class="sheet-body" id="form" novalidate autocomplete="off">
+      <section class="pane" id="pane-general" role="tabpanel" aria-labelledby="tab-general">
+        <label class="switch-row" for="f-live"><span class="text"><span class="title">Type while speaking</span>
+          <span class="hint">Each phrase is typed as soon as it is recognized. Turn off to type everything when you stop.</span></span>
+          <span class="switch"><input type="checkbox" id="f-live" name="liveTyping" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
+        <div class="field"><label for="f-language">Language</label>
+          <select id="f-language" name="language">
+            <option value="">Detect automatically</option><option value="en">English</option><option value="hi">Hindi</option><option value="es">Spanish</option>
+            <option value="fr">French</option><option value="de">German</option><option value="it">Italian</option><option value="pt">Portuguese</option>
+            <option value="nl">Dutch</option><option value="ru">Russian</option><option value="ar">Arabic</option><option value="ja">Japanese</option>
+            <option value="ko">Korean</option><option value="zh">Chinese</option>
+          </select>
+          <p class="hint">Choosing a language is faster and more accurate.</p></div>
+        <div class="field"><span class="label" id="afterLabel">After dictation</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="afterLabel">
+            <label><input type="radio" name="afterText" value="none"><span>Nothing</span></label>
+            <label><input type="radio" name="afterText" value="space"><span><i data-i="space"></i>Space</span></label>
+            <label><input type="radio" name="afterText" value="enter"><span><i data-i="enter"></i>Enter</span></label>
+          </div></div>
+        <div class="field"><label for="f-max">Stop recording after</label>
+          <select id="f-max" name="maxSeconds"><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option>
+            <option value="600">10 minutes</option><option value="1800">30 minutes</option><option value="3600">1 hour</option></select></div>
+        <div class="field"><label for="f-speed">Typing speed</label>
+          <select id="f-speed" name="keyDelayMs"><option value="0">Ultra fast</option><option value="4">Fast</option><option value="8">Normal</option><option value="20">Reliable</option><option value="40">Slow</option></select>
+          <p class="hint">Use a slower speed if the device misses characters.</p></div>
+      </section>
+
+      <section class="pane" id="pane-server" role="tabpanel" aria-labelledby="tab-server" hidden>
+        <div class="field"><label for="f-url">Server URL</label>
+          <input id="f-url" name="serverUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://whisper.example.com">
+          <p class="hint">The transcription gateway. Use HTTPS when this page is opened over HTTPS.</p></div>
+        <div class="field"><label for="f-key">API key</label>
+          <div class="input-group"><input id="f-key" name="apiKey" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Not required">
+          <button type="button" id="toggleKey" aria-label="Show API key" aria-pressed="false"><i data-i="eye"></i></button></div></div>
+        <div class="test-row"><button type="button" class="btn secondary" id="testServer"><i data-i="activity"></i>Test connection</button><span class="test-result" id="testResult" aria-live="polite"></span></div>
+        <details><summary>Advanced<i data-i="chevron"></i></summary><div class="inner">
+          <div class="field"><label for="f-model">Model</label>
+            <input id="f-model" name="model" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+          <div class="field"><label for="f-prompt">Vocabulary</label>
+            <textarea id="f-prompt" name="prompt" rows="3" placeholder="Names, products or jargon, e.g. Kubernetes, Nitin, ESP32"></textarea>
+            <p class="hint">Helps Whisper spell uncommon words correctly.</p></div>
+        </div></details>
+      </section>
+
+      <section class="pane" id="pane-device" role="tabpanel" aria-labelledby="tab-device" hidden>
+        <dl class="about"><dt>IP address</dt><dd id="infoIp">–</dd><dt>Local name</dt><dd id="infoHost">–</dd><dt>Wi-Fi signal</dt><dd id="infoSignal">–</dd><dt>Access point</dt><dd id="infoAp">–</dd></dl>
+        <div class="callout"><i data-i="alert"></i><span>Changing these restarts the keyboard. A new Bluetooth name needs pairing again.</span></div>
+        <div class="field"><label for="f-ble">Bluetooth name</label><input id="f-ble" name="bleName" type="text" maxlength="29" autocapitalize="off"></div>
+        <div class="field"><label for="f-wifi">Wi-Fi network</label><input id="f-wifi" name="wifiName" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+        <div class="field"><label for="f-wifipass">Wi-Fi password</label>
+          <div class="input-group"><input id="f-wifipass" name="wifiPassword" type="password" autocapitalize="off" placeholder="Unchanged">
+          <button type="button" data-reveal="f-wifipass" aria-label="Show Wi-Fi password" aria-pressed="false"><i data-i="eye"></i></button></div></div>
+        <div class="field"><label for="f-host">Hostname</label><input id="f-host" name="hostname" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" pattern="[A-Za-z0-9-]+">
+          <p class="hint" id="hostHint"></p></div>
+        <div class="field"><label for="f-webpass">Web app password</label>
+          <div class="input-group"><input id="f-webpass" name="webPassword" type="password" autocomplete="new-password" placeholder="Unchanged">
+          <button type="button" data-reveal="f-webpass" aria-label="Show password" aria-pressed="false"><i data-i="eye"></i></button></div>
+          <p class="hint">Any text or number. Other devices will need to log in again.</p></div>
+        <button type="button" class="btn secondary" id="signOut"><i data-i="x"></i>Sign out of this device</button>
+      </section>
+    </form>
+    <div class="sheet-foot"><button class="btn primary" id="save" disabled>Save changes</button></div>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+// Lucide icons (ISC license), inlined so the page works offline.
+const ICONS={
+  mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
+  square:'<rect x="5" y="5" width="14" height="14" rx="3"/>',
+  settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  keyboardOff:'<path d="M20 4a2 2 0 0 1 2 2v10.4M7 16h9M9.7 4H20M14 8h.01M18 8h.01M2 2l20 20M20 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2M6 8h.01M8 12h.01"/>',
+  keyboard:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>',
+  bluetooth:'<path d="m7 7 10 10-5 5V2l5 5L7 17"/>',
+  server:'<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
+  delete:'<path d="M10 5a2 2 0 0 0-1.34.52l-6.33 5.74a1 1 0 0 0 0 1.48l6.33 5.74A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6M18 9l-6 6"/>',
+  enter:'<path d="M9 10 4 15l5 5"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
+  space:'<path d="M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  alert:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  eye:'<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff:'<path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M14.12 14.12a3 3 0 1 1-4.24-4.24M2 2l20 20"/>',
+  activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/>',
+  cpu:'<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+  up:'<path d="m18 15-6-6-6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',
+  chevron:'<path d="m6 9 6 6 6-6"/>'
+};
+const svg=n=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
+function paintIcons(root=document){root.querySelectorAll('i[data-i]').forEach(el=>{const t=document.createElement('template');t.innerHTML=svg(el.dataset.i);const s=t.content.firstChild;if(el.className)s.classList.add(...el.className.split(' '));el.replaceWith(s)})}
+paintIcons();
+
+const $=s=>document.querySelector(s);
+const app=$('#app'),mic=$('#mic'),statusEl=$('#status'),timerEl=$('#timer'),wave=$('#wave'),halo=$('#halo');
+const BARS=31;for(let i=0;i<BARS;i++)wave.appendChild(document.createElement('span'));
+const bars=[...wave.children];
+let cfg={},deviceStatus={},state='idle';
+
+// ---------- Helpers ----------
+let toastTimer;
+function toast(message,{error=false,action,onAction,duration=3500}={}){
+  const t=$('#toast');t.classList.toggle('error',error);
+  t.querySelector('svg').innerHTML=ICONS[error?'alert':'check'];t.querySelector('.msg').textContent=message;
+  t.querySelector('button')?.remove();
+  if(action){const b=document.createElement('button');b.textContent=action;b.onclick=()=>{t.classList.remove('show');onAction()};t.appendChild(b)}
+  t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),action?7000:duration);
+}
+function say(text,error=false){statusEl.textContent=text;statusEl.classList.toggle('error',error)}
+function serverUrl(path){return new URL(String(cfg.serverUrl||'').replace(/\/+$/,'')+path,location.href)}
+async function post(url,body){const r=await fetch(url,{method:'POST',body});const t=await r.text();if(!r.ok)throw new Error(t||r.statusText);return t}
+
+// "remote" mirrors a dictation running in another web UI of the same keyboard.
+function setState(next){
+  state=next;const active=next==='recording'||next==='remote';
+  app.classList.toggle('recording',active);
+  app.classList.toggle('busy',next==='connecting'||next==='finishing');
+  mic.setAttribute('aria-pressed',active);
+  mic.setAttribute('aria-label',next==='recording'?'Stop dictation':next==='remote'?'Stop the dictation on the other device':next==='idle'?'Start dictation':'Working');
+  $('#discard').tabIndex=active?0:-1;$('#discard').setAttribute('aria-hidden',!active);
+  if(next==='idle'){resetWave();clearCaption()}
+}
+
+// ---------- Device and server status ----------
+function setChip(el,s,label,full){el.dataset.state=s;el.setAttribute('aria-label',full);el.title=full}
+async function pollDevice(){
+  try{
+    deviceStatus=await (await fetch('/api/status',{cache:'no-store'})).json();
+    const {ble,bleEnabled}=deviceStatus;
+    setChip($('#bleChip'),!bleEnabled?'off':ble?'ok':'wait',!bleEnabled?'Off':ble?'Connected':'Waiting',
+      'Keyboard '+(!bleEnabled?'turned off':ble?'connected':'waiting for the device to connect'));
+    showBluetoothButton(bleEnabled);
+    const r=deviceStatus.rssi;$('#infoIp').textContent=deviceStatus.ip;$('#infoHost').textContent=`${cfg.hostname||'voice-keyboard'}.local`;
+    $('#infoSignal').textContent=`${r>-60?'Excellent':r>-70?'Good':r>-80?'Fair':'Weak'} (${r} dBm)`;
+    const aps=deviceStatus.accessPoints||[];$('#infoAp').textContent=`${deviceStatus.bssid||'–'}${aps.length>1?` (1 of ${aps.length} found)`:''}`;
+    lockKeys(!deviceStatus.ble);
+  }catch{setChip($('#bleChip'),'bad','Offline','Keyboard unreachable')}
+}
+async function checkServer(url){
+  const u=new URL(String(url).replace(/\/+$/,'')+'/health',location.href);
+  if(location.protocol==='https:'&&u.protocol==='http:')return{ok:false,insecure:true,reason:'Blocked: this page is HTTPS, so the server URL must be HTTPS too'};
+  try{const r=await fetch(u,{cache:'no-store',signal:AbortSignal.timeout(4000)});const j=await r.json();
+    return j.whisper===false?{ok:false,reason:'Gateway is up, Whisper is still starting'}:{ok:r.ok,reason:r.ok?'Connected':'HTTP '+r.status}}
+  catch{return{ok:false,reason:'Cannot reach the server'}}
+}
+async function pollServer(){if(!cfg.serverUrl)return setChip($('#serverChip'),'bad','Set up','No server URL set');
+  const r=await checkServer(cfg.serverUrl);
+  setChip($('#serverChip'),r.ok?'ok':'bad',r.ok?'Online':r.insecure?'Needs HTTPS':'Offline','Server: '+r.reason)}
+
+// ---------- Dictation ----------
+// Captures the mic, downsamples to 16 kHz mono int16 and posts 100 ms chunks.
+const WORKLET=`class P extends AudioWorkletProcessor{constructor(){super();this.r=sampleRate/16000;this.t=0;this.a=0;this.c=0;this.o=new Int16Array(1600);this.n=0;
+this.port.onmessage=()=>{if(this.n){this.port.postMessage(this.o.slice(0,this.n).buffer);this.n=0}this.port.postMessage('flushed')}}
+process(i){const ch=i[0]&&i[0][0];if(!ch)return true;for(let k=0;k<ch.length;k++){this.a+=ch[k];this.c++;if(++this.t>=this.r){this.t-=this.r;let v=this.a/this.c;this.a=this.c=0;
+v=v>1?1:v<-1?-1:v;this.o[this.n++]=v*32767;if(this.n===1600){const b=this.o.buffer;this.port.postMessage(b,[b]);this.o=new Int16Array(1600);this.n=0}}}return true}}
+registerProcessor('pcm16',P)`;
+const workletUrl=URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'}));
+// One AudioContext for the whole page: iOS Safari can leave newly created
+// contexts suspended, which silently delivers no audio.
+let sharedCtx=null,workletLoaded=false,lastChunkAt=0;
+let audio=null,ws=null,pending=null,stopRequested=false,startedAt=0,frame=0,finishTimer=0,wakeLock=null;
+// Live typing: phrases are posted to the ESP32 in order as they arrive.
+let live=false,typedAny=false,liveChain=Promise.resolve(),liveError=false;
+
+async function startDictation(){
+  if(state!=='idle')return;
+  if(!window.isSecureContext||!navigator.mediaDevices){toast('The microphone needs HTTPS. Open this page through your HTTPS proxy.',{error:true});return}
+  if(!cfg.serverUrl){toast('Set the server URL in Settings first.',{error:true,action:'Open',onAction:()=>openSheet('server')});return}
+  if(location.protocol==='https:'&&serverUrl('').protocol==='http:'){toast('This page is HTTPS, so the server URL must be HTTPS too.',{error:true,action:'Fix',onAction:()=>openSheet('server')});return}
+  if(deviceStatus.bleEnabled===false)setBluetooth(true);  // Not awaited: the mic must start inside the tap.
+  setState('connecting');say('Starting…');
+  if(!sharedCtx||sharedCtx.state==='closed'){sharedCtx=new (window.AudioContext||window.webkitAudioContext)();workletLoaded=false}
+  const ctx=sharedCtx,resumed=ctx.resume();  // Resumed inside the tap, as iOS requires.
+  audio={ctx};
+  try{
+    audio.stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    await resumed;
+    if(!workletLoaded){await ctx.audioWorklet.addModule(workletUrl);workletLoaded=true}
+  }catch(e){teardownAudio();setState('idle');say('Tap the microphone to dictate');
+    toast(e.name==='NotAllowedError'?'Microphone access was blocked. Allow it in the browser settings.':'Could not start the microphone.',{error:true});return}
+  const source=ctx.createMediaStreamSource(audio.stream),node=new AudioWorkletNode(ctx,'pcm16'),mute=ctx.createGain(),analyser=ctx.createAnalyser();
+  mute.gain.value=0;analyser.fftSize=1024;analyser.smoothingTimeConstant=.6;
+  source.connect(node);node.connect(mute);mute.connect(ctx.destination);source.connect(analyser);
+  Object.assign(audio,{source,node,mute,analyser,data:new Uint8Array(analyser.fftSize)});
+  // Watchdog: a stalled context would otherwise record nothing without telling anyone.
+  lastChunkAt=performance.now();
+  ctx.onstatechange=()=>{if(state==='recording'&&ctx.state!=='running')ctx.resume().catch(()=>{})};
+  audio.watch=setInterval(()=>{if(state!=='recording')return;const idle=performance.now()-lastChunkAt;
+    if(idle>2500)ctx.resume().catch(()=>{});
+    if(idle>5000)fail('The microphone stopped sending audio. Please try again.')},1000);
+
+  pending=[];stopRequested=false;live=!!cfg.liveTyping;typedAny=false;liveError=false;liveChain=Promise.resolve();
+  const url=serverUrl('/v1/stream');url.protocol=url.protocol==='https:'?'wss:':'ws:';
+  if(cfg.apiKey)url.searchParams.set('token',cfg.apiKey);
+  try{ws=new WebSocket(url)}catch{return fail('The server URL is not valid.')}
+  ws.binaryType='arraybuffer';
+  ws.onopen=()=>{ws.send(JSON.stringify({type:'start',language:cfg.language||'',prompt:cfg.prompt||'',model:cfg.model||'',live,room:room(),client:clientId}));
+    pending.forEach(b=>ws.send(b));pending=null;if(stopRequested)ws.send('{"type":"stop"}')};
+  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='segment'){caption(m.text);if(live)typeLive(m.text)}else if(m.type==='final')finish(m.text);
+    else if(m.type==='remote_stop')stopDictation();else if(m.type==='remote_cancel')discardDictation();
+    else if(m.type==='error')fail('Transcription failed: '+m.message)};
+  ws.onclose=e=>{if(state==='recording'||state==='finishing'||state==='connecting')
+    fail(e.code===4401?'The server rejected the API key.':'Lost connection to the transcription server.')};
+  node.port.onmessage=e=>{
+    if(e.data==='flushed')return sendStop();
+    lastChunkAt=performance.now();
+    if(pending)pending.push(e.data);else if(ws&&ws.readyState===1)ws.send(e.data);
+  };
+  startedAt=performance.now();caption('',true);setState('recording');say(live?'Listening… typing as you speak':'Listening…');draw();
+  try{wakeLock=await navigator.wakeLock?.request('screen')}catch{}
+}
+
+function stopDictation(){
+  if(state!=='recording')return;
+  setState('finishing');say('Transcribing…');
+  audio.node.port.postMessage('flush');  // Send the last partial chunk, then "stop"...
+  setTimeout(sendStop,700);              // ...but never wait on a stalled audio thread.
+  finishTimer=setTimeout(()=>fail('The server took too long to respond.'),60000);
+}
+function sendStop(){
+  if(stopRequested)return;stopRequested=true;
+  if(ws&&ws.readyState===1&&!pending)ws.send('{"type":"stop"}');  // Otherwise sent on open.
+  teardownAudio();
+}
+
+function discardDictation(){
+  if(state!=='recording')return;
+  if(ws&&ws.readyState===1)ws.send('{"type":"cancel"}');
+  cleanup();setState('idle');say(live&&typedAny?'Stopped. Text already typed stays':'Recording discarded');
+}
+
+async function finish(text){
+  cleanup();text=(text||'').trim();
+  if(live){setState('idle');await liveChain;
+    if(!typedAny)return say('No speech detected');
+    try{await post('/api/type?after=1','')}catch{}  // Only the "after dictation" key.
+    return liveError?say('Some text could not be typed',true):watchTyping();}
+  if(!text){setState('idle');say('No speech detected');return}
+  setState('idle');await typeOnDevice(text);
+}
+
+function typeLive(text){
+  const chunk=text;if(!chunk)return;typedAny=true;  // Pieces arrive with their own separators.
+  liveChain=liveChain.then(async()=>{
+    for(let attempt=0;attempt<25;attempt++){
+      const r=await fetch('/api/type',{method:'POST',body:chunk}).catch(()=>null);
+      if(r&&r.ok)return;
+      const msg=r?await r.text():'Keyboard unreachable';
+      // Retry while the queue is full or the keyboard is still reconnecting.
+      if(!r||!/Still typing|No Bluetooth/.test(msg)){if(!liveError)toast(msg,{error:true});liveError=true;return}
+      await new Promise(res=>setTimeout(res,400));
+    }
+  });
+}
+
+async function typeOnDevice(text){
+  if(!deviceStatus.ble){say('Waiting for the keyboard to connect…');await waitForKeyboard()}
+  try{await post('/api/type?after=1',text);say(`Typing ${text.split(/\s+/).length} words…`);watchTyping()}
+  catch(e){say('Tap the microphone to dictate');toast(e.message,{error:true,action:'Retry',onAction:()=>typeOnDevice(text)})}
+}
+function watchTyping(){const tick=async()=>{await pollDevice();if(deviceStatus.typing)setTimeout(tick,400);else if(state==='idle')say('Done. Tap the microphone to dictate again')};setTimeout(tick,400)}
+
+function fail(message){if(state==='idle')return;cleanup();setState('idle');say('Tap the microphone to dictate');toast(message,{error:true})}
+function teardownAudio(){if(!audio)return;cancelAnimationFrame(frame);clearInterval(audio.watch);
+  for(const n of [audio.source,audio.node,audio.mute,audio.analyser])try{n?.disconnect()}catch{}
+  if(audio.node)audio.node.port.onmessage=null;
+  audio.stream?.getTracks().forEach(t=>t.stop());audio.ctx.suspend().catch(()=>{});audio=null}
+function cleanup(){clearTimeout(finishTimer);teardownAudio();if(ws){ws.onclose=null;if(ws.readyState<2)ws.close();ws=null}pending=null;wakeLock?.release().catch(()=>{});wakeLock=null}
+
+// Level meter and timer.
+const history=new Array(BARS).fill(0);let peak=0,lastBar=0,lastLevelSent=0;
+function render(level,since){
+  const now=performance.now();peak=Math.max(peak,level);
+  if(now-lastBar>=50){history.shift();history.push(peak);peak=0;lastBar=now}  // ~1.5 s of history across the bars
+  bars.forEach((b,i)=>{const mid=1-Math.abs(i-(BARS-1)/2)/((BARS-1)/2)*.45;b.style.transform=`scaleY(${Math.max(.08,history[i]*mid)})`});
+  halo.style.transform=`scale(${1+level*.18})`;
+  const s=Math.max(0,Math.floor((now-since)/1000));timerEl.textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;return s;
+}
+function draw(){
+  if(!audio||state!=='recording')return;
+  audio.analyser.getByteTimeDomainData(audio.data);
+  let sum=0;for(const v of audio.data){const d=(v-128)/128;sum+=d*d}
+  const level=Math.min(1,Math.sqrt(sum/audio.data.length)*3),now=performance.now();
+  if(ws&&ws.readyState===1&&now-lastLevelSent>=100){ws.send(`{"type":"level","v":${level.toFixed(2)}}`);lastLevelSent=now}  // For mirrored UIs.
+  if(render(level,startedAt)>=(cfg.maxSeconds||600)){stopDictation();return}
+  frame=requestAnimationFrame(draw);
+}
+
+// Live caption of what has been recognized so far; only the tail is shown.
+let captionText='';
+function clearCaption(){const box=$('#caption');box.classList.add('empty');captionText='';
+  setTimeout(()=>{if(!captionText)box.querySelector('.inner').textContent=''},300)}  // After the fade.
+function caption(piece,reset){
+  const box=$('#caption'),el=box.querySelector('.inner');if(reset){captionText='';el.textContent=''}
+  box.classList.toggle('empty',!captionText&&!piece);if(!piece)return;
+  const before=captionText;captionText+=piece;
+  el.textContent=before.length>400?before.slice(-400).replace(/^\S*\s/,''):before;  // More than fits; the top is clipped.
+  const add=document.createElement('span');add.className='new';add.textContent=piece;el.appendChild(add);
+}
+
+// ---------- Sync with other open web UIs ----------
+const clientId=crypto.randomUUID?.()||String(Math.random()).slice(2);
+const room=()=>cfg.hostname||'voice-keyboard';
+let events=null,remote=null;
+function connectEvents(){
+  if(!cfg.serverUrl||(location.protocol==='https:'&&serverUrl('').protocol==='http:'))return;
+  const u=serverUrl('/v1/events');u.protocol=u.protocol==='https:'?'wss:':'ws:';u.searchParams.set('room',room());
+  if(cfg.apiKey)u.searchParams.set('token',cfg.apiKey);
+  let e;try{e=events=new WebSocket(u)}catch{return}
+  e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.owner===clientId)return;
+    if(m.type==='state'){if(m.active)enterRemote(m);else if(remote)exitRemote(m.final)}
+    else if(m.type==='level'&&remote)remote.level=m.v;
+    else if(m.type==='segment'&&remote)caption(m.text)};
+  e.onclose=()=>{if(events!==e)return;events=null;if(remote)exitRemote();setTimeout(connectEvents,3000)};
+}
+function reconnectEvents(){const e=events;events=null;e?.close();connectEvents()}
+function sendEvent(type){if(events?.readyState===1)events.send(JSON.stringify({type}))}
+function enterRemote(m){if(state!=='idle'&&state!=='remote')return;
+  if(!remote)caption(m.text||'',true);
+  remote={level:0,startedAt:performance.now()-(m.elapsed||0)*1000};setState('remote');say('Dictating on another device');drawRemote()}
+function exitRemote(final){remote=null;cancelAnimationFrame(frame);if(state!=='remote')return;setState('idle');
+  say(final?'Dictation finished on another device':'Tap the microphone to dictate');if(final)watchTyping()}
+function drawRemote(){if(state!=='remote'||!remote)return;remote.level*=.9;render(remote.level,remote.startedAt);frame=requestAnimationFrame(drawRemote)}
+function resetWave(){history.fill(0);bars.forEach(b=>b.style.transform='');halo.style.transform='';timerEl.textContent='0:00'}
+
+mic.addEventListener('click',()=>state==='idle'?startDictation():state==='recording'?stopDictation():state==='remote'&&(sendEvent('stop'),say('Stopping the other device…')));
+$('#discard').addEventListener('click',()=>state==='remote'?(sendEvent('cancel'),say('Discarding on the other device…')):discardDictation());
+document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document.body&&!$('#sheet').open){e.preventDefault();mic.click()}});
+
+// ---------- Keys ----------
+// Requests are chained so "down", "hold" and "up" reach the ESP32 in order.
+let keyChain=Promise.resolve();
+function sendKey(query){keyChain=keyChain.then(()=>fetch('/api/key?'+query,{method:'POST'}).then(async r=>{if(!r.ok)toast(await r.text(),{error:true})})).catch(()=>{})}
+// Backspace and the arrows: one press per tap, auto-repeat while held.
+document.querySelectorAll('[data-key]').forEach(function holdToRepeat(btn){
+  const k='k='+btn.dataset.key;let held=false,renew=0;
+  const down=e=>{if(held||btn.disabled)return;e.preventDefault();held=true;btn.classList.add('pressed');e.pointerId!==undefined&&btn.setPointerCapture?.(e.pointerId);
+    sendKey(k+'&s=down');renew=setInterval(()=>sendKey(k+'&s=hold'),150)};
+  const up=()=>{if(!held)return;held=false;clearInterval(renew);btn.classList.remove('pressed');sendKey(k+'&s=up')};
+  btn.addEventListener('pointerdown',down);['pointerup','pointercancel','lostpointercapture'].forEach(n=>btn.addEventListener(n,up));
+  btn.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.repeat)down(e)});btn.addEventListener('keyup',up);btn.addEventListener('blur',up);
+  btn.addEventListener('contextmenu',e=>e.preventDefault());
+});
+$('#enter').addEventListener('click',()=>sendKey('k=enter'));
+
+// Disconnecting brings back the device's on-screen keyboard; dictating reconnects.
+function lockKeys(locked){$('.keys').classList.toggle('locked',locked);document.querySelectorAll('.keys button').forEach(b=>b.disabled=locked)}
+function showBluetoothButton(enabled){const b=$('#bluetooth');if(!enabled)lockKeys(true);b.classList.toggle('off',!enabled);b.setAttribute('aria-pressed',!enabled);
+  b.querySelector('svg').innerHTML=ICONS[enabled?'keyboardOff':'keyboard'];
+  const label=enabled?'Disconnect the keyboard so the device shows its on-screen keyboard':'Connect the keyboard';b.setAttribute('aria-label',label);b.title=label}
+async function setBluetooth(on){deviceStatus.bleEnabled=on;showBluetoothButton(on);
+  try{await post('/api/bluetooth?on='+(on?1:0));toast(on?'Keyboard reconnecting…':'Keyboard disconnected. The on-screen keyboard is back.')}
+  catch(e){toast(e.message,{error:true})}pollDevice()}
+$('#bluetooth').addEventListener('click',()=>setBluetooth(deviceStatus.bleEnabled===false));
+async function waitForKeyboard(ms=10000){const end=Date.now()+ms;while(Date.now()<end){await pollDevice();if(deviceStatus.ble)return true;await new Promise(r=>setTimeout(r,500))}return false}
+
+// ---------- Settings sheet ----------
+const sheet=$('#sheet'),form=$('#form'),saveBtn=$('#save'),tabs=[...document.querySelectorAll('[role=tab]')];
+function selectTab(name,focus){tabs.forEach((t,i)=>{const on=t.id==='tab-'+name;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1;
+  $('#'+t.getAttribute('aria-controls')).hidden=!on;if(on){$('#tabPill').style.transform=`translateX(${i*100}%)`;focus&&t.focus()}})}
+tabs.forEach((t,i)=>{t.addEventListener('click',()=>selectTab(t.id.slice(4)));
+  t.addEventListener('keydown',e=>{const d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(d)selectTab(tabs[(i+d+tabs.length)%tabs.length].id.slice(4),true)})});
+
+function fillForm(){
+  for(const el of form.elements){if(!el.name)continue;const v=cfg[el.name];
+    if(el.type==='radio')el.checked=el.value===v;
+    else if(el.type==='checkbox')el.checked=!!v;
+    else if(el.name==='wifiPassword'||el.name==='webPassword')el.value='';
+    else if(v!==undefined){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(v)))el.add(new Option(String(v),v));el.value=v}}
+  $('#hostHint').textContent=`Reachable at http://${cfg.hostname||'voice-keyboard'}.local`;
+  $('#testResult').textContent='';$('#testResult').className='test-result';saveBtn.disabled=true;
+}
+function changes(){const out=new URLSearchParams();
+  for(const el of form.querySelectorAll('input[type=checkbox][name]'))if(el.checked!==!!cfg[el.name])out.set(el.name,el.checked?'1':'0');
+  for(const[k,v]of new FormData(form)){if(form.elements[k]?.type==='checkbox')continue;if(k==='wifiPassword'||k==='webPassword'?v:String(cfg[k]??'')!==v)out.set(k,v)}return out}
+form.addEventListener('input',()=>{saveBtn.disabled=![...changes()].length});
+
+function openSheet(tab='general'){fillForm();selectTab(tab);sheet.showModal();$('#sheetTitle').focus();requestAnimationFrame(()=>requestAnimationFrame(()=>sheet.classList.add('open')))}
+function closeSheet(){if(!sheet.open)return;sheet.classList.remove('open');sheet.style.removeProperty('--drag');
+  const done=()=>{sheet.close();$('#openSettings').focus()};matchMedia('(prefers-reduced-motion:reduce)').matches?done():setTimeout(done,300)}
+$('#openSettings').addEventListener('click',()=>openSheet());
+
+sheet.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeSheet()});
+sheet.addEventListener('cancel',e=>{e.preventDefault();closeSheet()});
+
+// Drag the sheet down to dismiss it.
+(function dragToClose(){let y0=null,dy=0;const zone=[$('#grab'),$('#sheetHead')];
+  const move=e=>{if(y0===null)return;dy=Math.max(0,e.clientY-y0);sheet.style.setProperty('--drag',dy+'px')};
+  const end=()=>{if(y0===null)return;y0=null;sheet.classList.remove('dragging');if(dy>110)closeSheet();else sheet.style.removeProperty('--drag')};
+  zone.forEach(z=>z.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;y0=e.clientY;dy=0;sheet.classList.add('dragging');z.setPointerCapture(e.pointerId)}));
+  zone.forEach(z=>{z.addEventListener('pointermove',move);z.addEventListener('pointerup',end);z.addEventListener('pointercancel',end)})})();
+
+document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListener('click',()=>{
+  const input=b.dataset.reveal?$('#'+b.dataset.reveal):$('#f-key'),show=input.type==='password';input.type=show?'text':'password';
+  b.setAttribute('aria-pressed',show);b.querySelector('svg').innerHTML=ICONS[show?'eyeOff':'eye']}));
+
+$('#testServer').addEventListener('click',async()=>{const out=$('#testResult');out.className='test-result';out.textContent='Checking…';
+  const url=form.elements.serverUrl.value||cfg.serverUrl,key=form.elements.apiKey.value;
+  let r=await checkServer(url);
+  if(r.ok)try{const a=await fetch(new URL(String(url).replace(/\/+$/,'')+'/v1/models',location.href),{headers:key?{Authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(6000)});
+    if(a.status===401)r={ok:false,reason:key?'The API key was rejected':'This server needs an API key'};else if(a.ok)r={ok:true,reason:'Connected, API key accepted'}}catch{}
+  out.className='test-result '+(r.ok?'ok':'bad');out.innerHTML=svg(r.ok?'check':'alert');out.append(r.reason)});
+
+saveBtn.addEventListener('click',async()=>{
+  const body=changes();if(![...body].length)return;
+  saveBtn.disabled=true;saveBtn.textContent='Saving…';
+  try{const result=await post('/api/settings',body);closeSheet();
+    if(result==='restart'){toast('Saved. The keyboard is restarting…',{duration:6000});setTimeout(()=>location.reload(),8000)}
+    else{toast('Settings saved');await loadSettings();pollServer();reconnectEvents()}}
+  catch(e){toast('Could not save: '+e.message,{error:true})}
+  finally{saveBtn.textContent='Save changes'}
+});
+
+async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);cfg=await r.json()}
+
+// ---------- Login ----------
+const nativeFetch=window.fetch.bind(window);let locked=false;
+window.fetch=async(url,opts)=>{const r=await nativeFetch(url,opts);
+  if(r.status===401&&String(url).startsWith('/api/')&&!String(url).startsWith('/api/login'))showLogin();return r};
+function showLogin(){if(locked)return;locked=true;if(state==='recording')discardDictation();if(sheet.open)closeSheet();
+  $('#login').classList.add('show');$('#loginError').textContent='';setTimeout(()=>$('#loginPassword').focus(),50)}
+$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();const btn=$('#loginButton'),pw=$('#loginPassword');if(!pw.value)return;
+  btn.disabled=true;btn.textContent='Unlocking…';
+  try{const r=await nativeFetch('/api/login',{method:'POST',body:new URLSearchParams({password:pw.value})});
+    if(!r.ok){$('#loginError').textContent=r.status===401?'Wrong password':r.status===429?'Too many attempts, wait a moment':'Could not log in';e.target.classList.remove('shake');void e.target.offsetWidth;e.target.classList.add('shake');pw.select();return}
+    locked=false;pw.value='';$('#login').classList.remove('show');await start()}
+  catch{$('#loginError').textContent='Cannot reach the keyboard'}
+  finally{btn.disabled=false;btn.textContent='Unlock'}});
+$('#signOut').addEventListener('click',async()=>{await nativeFetch('/api/logout',{method:'POST'});closeSheet();showLogin()});
+
+let started=false;
+async function start(){
+  try{await loadSettings()}catch(e){if(e.message!=='401')toast('Cannot reach the keyboard.',{error:true});return}
+  pollDevice();pollServer();reconnectEvents();
+  if(!started){started=true;setInterval(()=>locked||pollDevice(),3000);setInterval(()=>locked||pollServer(),15000)}
+}
+start();
+</script>
+</body>
+</html>

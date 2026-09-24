@@ -1,0 +1,44 @@
+# Self-hosted Whisper transcription backend for the ESP32 voice keyboard.
+# One container, one published port: the gateway streams live audio to Whisper
+# (WebSocket /v1/stream) and passes the OpenAI-compatible /v1/* API through.
+# Whisper itself only listens on the container's localhost.
+services:
+  transcription:
+    build: .
+    container_name: voice-keyboard-transcription
+    restart: unless-stopped
+    ports:
+      - "${WHISPER_PORT:-8000}:8000"
+    env_file:
+      # Optional; API_KEY here protects the gateway.
+      - path: .env
+        required: false
+    environment:
+      WHISPER_MODEL: "${WHISPER_MODEL:-deepdml/faster-whisper-large-v3-turbo-ct2}"
+      WHISPER__MODEL: "${WHISPER_MODEL:-deepdml/faster-whisper-large-v3-turbo-ct2}"
+      # Keep the model resident on the GPU so every dictation is fast.
+      STT_MODEL_TTL: "-1"
+      # INT8 weights reduce VRAM substantially while retaining CUDA speed.
+      WHISPER__COMPUTE_TYPE: "${WHISPER_COMPUTE_TYPE:-int8_float16}"
+      WHISPER__INFERENCE_DEVICE: "cuda"
+      WHISPER__NUM_WORKERS: "1"
+      WHISPER__CPU_THREADS: "4"
+      ENABLE_UI: "false"
+      LOG_LEVEL: "info"
+    volumes:
+      # Downloaded models persist here (git-ignored).
+      - ./volumes/huggingface:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      # The image has neither curl nor "python", only python3.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
