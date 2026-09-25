@@ -27,13 +27,22 @@ and insert each `segment` as it arrives. Each device uses its own room,
 Builds live in GitHub Releases (tags `voice-keyboard-v*`), not in git.
 
 ```bash
-tools/release_mobile.sh 1.0.0      # build + sign APK, tag, create the release
-tools/fetch_mobile_release.sh      # on the server: pull the latest builds
+tools/release_mobile.sh 1.0.0   # build + sign the APK, tag, create the release
 ```
 
 The tag starts the "Voice Keyboard iOS" workflow. It builds the unsigned `.ipa` on a
 GitHub macOS runner and attaches it to the same release, usually within about
-10 minutes. Because the repository is private, phones cannot download
-release assets directly. The server fetches them into `mobile/releases/`
-(ignored by git and mounted read-only into the container), and `/downloads`
-serves them from there. Set `IOS_DOWNLOAD_URL` if you use TestFlight instead.
+10 minutes.
+
+The backend mirrors the newest release into its data volume
+(`/data/releases`). It checks on start-up and every `RELEASE_SYNC_SECONDS`
+(default 1 hour), and `/downloads` serves the files from there. Phones never
+talk to GitHub, which matters because release assets of a private repository
+need a token. Configure it in `backend/.env`:
+
+```bash
+GITHUB_REPO=owner/repo
+GITHUB_TOKEN=github_pat_...   # fine-grained, read-only "Contents" on that repo
+```
+
+Set `IOS_DOWNLOAD_URL` if you also distribute through TestFlight.

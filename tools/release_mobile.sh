@@ -13,12 +13,11 @@ git fetch -q origin
 [ "$(git rev-parse HEAD)" = "$(git rev-parse '@{u}')" ] || { echo "Push your branch first" >&2; exit 1; }
 
 (cd mobile/android && JAVA_HOME=${JAVA_HOME:-$HOME/Android/jdk21} ./gradlew -q assembleRelease)
-apk=mobile/releases/android/VoiceKeyboard.apk
-mkdir -p "$(dirname "$apk")"
+apk=$(mktemp -d)/VoiceKeyboard.apk
 cp mobile/android/app/build/outputs/apk/release/app-release.apk "$apk"
 
 git tag -a "$tag" -m "Voice Keyboard $version"
 git push -q origin "$tag"
 gh release create "$tag" "$apk" --verify-tag --title "Voice Keyboard $version" \
   --notes "Android: VoiceKeyboard.apk. iOS: VoiceKeyboard.ipa is attached by GitHub Actions when its build finishes (unsigned; install with SideStore/AltStore)."
-echo "Released $tag. Watch the iOS build with: gh run watch \$(gh run list --workflow voice-keyboard-ios.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+echo "Released $tag. The backend picks it up within RELEASE_SYNC_SECONDS (or on restart). Watch the iOS build with: gh run watch \$(gh run list --workflow voice-keyboard-ios.yml --limit 1 --json databaseId --jq '.[0].databaseId')"

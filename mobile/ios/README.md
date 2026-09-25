@@ -63,7 +63,7 @@ and microphone support.
 The GitHub Actions workflow `.github/workflows/voice-keyboard-ios.yml` builds it
 on a macOS runner. Branch pushes only check that it compiles; a
 `voice-keyboard-v*` tag attaches the `.ipa` to that GitHub release (see
-`tools/release_mobile.sh` and `tools/fetch_mobile_release.sh`).
+`tools/release_mobile.sh`). The backend mirrors it from there.
 
 ## Distribute through TestFlight (optional)
 

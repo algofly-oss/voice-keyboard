@@ -5,5 +5,3 @@ esp32/.env
 esp32/firmware_config.h
 *.pyc
 __pycache__/
-mobile/releases/**/*.apk
-mobile/releases/**/*.ipa

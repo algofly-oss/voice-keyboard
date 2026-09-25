@@ -25,7 +25,6 @@ services:
     volumes:
       - ./backend/volumes/huggingface:/root/.cache/huggingface
       - ./backend/volumes/gateway:/data
-      - ./mobile/releases:/data/releases:ro
     deploy:
       resources:
         reservations:

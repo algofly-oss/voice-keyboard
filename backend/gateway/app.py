@@ -255,9 +255,10 @@ async def warm_up():
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    task = asyncio.create_task(warm_up())
+    tasks = [asyncio.create_task(warm_up()), asyncio.create_task(sync_releases_forever())]
     yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
     await whisper.aclose()
 
 
@@ -293,6 +294,67 @@ RELEASE_FILES = {"android": ("VoiceKeyboard.apk", "application/vnd.android.packa
 def release_path(platform: str) -> Path | None:
     path = RELEASES_DIR / platform / RELEASE_FILES[platform][0]
     return path if path.is_file() else None
+
+
+# Mobile builds are published as GitHub releases tagged voice-keyboard-v*. The
+# gateway mirrors the newest one into RELEASES_DIR so /downloads can serve it
+# (release assets of a private repository need a token phones do not have).
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+RELEASE_TAG_PREFIX = "voice-keyboard-v"
+RELEASE_SYNC_SECONDS = int(os.environ.get("RELEASE_SYNC_SECONDS", "3600"))
+
+
+async def sync_releases() -> str | None:
+    """Download assets of the newest release that are new or changed. Returns its tag."""
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    async with httpx.AsyncClient(base_url="https://api.github.com", headers=headers, timeout=60,
+                                 follow_redirects=True) as github:
+        response = await github.get(f"/repos/{GITHUB_REPO}/releases", params={"per_page": 30})
+        response.raise_for_status()
+        release = next((r for r in response.json() if not r["draft"] and not r["prerelease"]
+                        and r["tag_name"].startswith(RELEASE_TAG_PREFIX)), None)
+        if not release:
+            return None
+        state_file = RELEASES_DIR / "release.json"
+        try:
+            state = json.loads(state_file.read_text())
+        except (OSError, ValueError):
+            state = {}
+        for platform, (filename, _) in RELEASE_FILES.items():
+            asset = next((a for a in release["assets"] if a["name"] == filename), None)
+            if not asset:
+                continue
+            version = f"{release['tag_name']}:{asset['id']}:{asset['updated_at']}"
+            if state.get(platform) == version and release_path(platform):
+                continue
+            target = RELEASES_DIR / platform / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            partial = target.with_suffix(".part")
+            async with github.stream("GET", asset["url"], headers={"Accept": "application/octet-stream"}) as download:
+                download.raise_for_status()
+                with partial.open("wb") as out:
+                    async for chunk in download.aiter_bytes():
+                        out.write(chunk)
+            partial.replace(target)  # atomic, so /downloads never serves half a file
+            state[platform] = version
+            state_file.write_text(json.dumps(state) + "\n")
+            log.info("Downloaded %s from release %s", filename, release["tag_name"])
+        return release["tag_name"]
+
+
+async def sync_releases_forever():
+    if not GITHUB_REPO:
+        return
+    while True:
+        try:
+            tag = await sync_releases()
+            log.info("Mobile release %s is current", tag) if tag else log.info("No %s* release on %s yet", RELEASE_TAG_PREFIX, GITHUB_REPO)
+        except Exception as e:  # GitHub unreachable or token missing; keep serving what we have.
+            log.warning("Release sync failed: %s", e)
+        await asyncio.sleep(RELEASE_SYNC_SECONDS)
 
 
 @app.get("/downloads", include_in_schema=False)

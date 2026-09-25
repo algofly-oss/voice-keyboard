@@ -79,9 +79,8 @@ $ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging ../releases/android/VoiceKey
 ## Where the APK goes
 
 Releases are published with `tools/release_mobile.sh <version>`, which attaches
-the APK to a GitHub release. It is not committed to git. On the server,
-`tools/fetch_mobile_release.sh` places it in `mobile/releases/android/`, and the
-server serves it at `/downloads/android/VoiceKeyboard.apk`.
+the APK to a GitHub release. It is not committed to git. The backend mirrors the
+newest release and serves it at `/downloads/android/VoiceKeyboard.apk`.
 
 ## Notes
 

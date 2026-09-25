@@ -63,9 +63,9 @@ On the phone, log in to the web app and open `https://your-host/downloads`.
 3. Enable the keyboard in system settings. On iOS, also turn on **Allow Full
    Access**.
 
-Builds are published as GitHub Releases, not stored in git. On the server, run
-`tools/fetch_mobile_release.sh` to download the latest APK and `.ipa` into
-`mobile/releases/`, where `/downloads` serves them. See
+Builds are published as GitHub Releases, not stored in git. Set `GITHUB_REPO`
+and `GITHUB_TOKEN` in `backend/.env`; the server then downloads the newest
+release on start-up and every hour and serves it at `/downloads`. See
 [mobile/README.md](mobile/README.md).
 
 ## 2. Hardware (ESP32)
