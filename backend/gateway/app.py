@@ -16,6 +16,7 @@ import io
 import json
 import logging
 import os
+import re
 import secrets
 import time
 import wave
@@ -99,6 +100,8 @@ BATCH = Policy(pause_ms=600, min_ms=6000, soft_ms=20000, hard_ms=28000)
 
 # Whisper ends every chunk with a full stop and capitalizes the next one. When
 # a cut falls mid-sentence, these words are lower-cased again at the seam.
+TRAILING_ELLIPSIS = re.compile(r"(?:\s*…|\s*\.(?:\s*\.)+)+\s*$")  # "...", "…", ". . ."
+
 LOWERCASE_AT_SEAM = set(
     "a an the and or but so to of in on at for with from by as is are was were be been it its "
     "this that these those there then than if when while because which who what where how not "
@@ -237,20 +240,28 @@ class Joiner:
     def __init__(self):
         self.pieces: list[str] = []
         self.held_stop = False  # full stop removed at the last forced cut
+        self.open_end = False   # the last piece already ends with a space
 
     def add(self, text: str, at_pause: bool) -> str:
+        # Whisper marks a phrase it thinks was cut off with "..."; type a space
+        # instead, so the next piece simply continues the sentence.
+        trimmed = TRAILING_ELLIPSIS.sub("", text)
+        ends_open, text = trimmed != text, trimmed
         if not text:
             return ""
-        separator = " " if self.pieces else ""
+        separator = "" if not self.pieces or self.open_end else " "
         if self.held_stop:
             first, _, rest = text.partition(" ")
             if first.lower() in LOWERCASE_AT_SEAM and first != "I":
                 text = first.lower() + (" " + rest if rest else "")  # the sentence continues
             else:
                 separator = ". "  # it really was a sentence end
-        self.held_stop = not at_pause and text.endswith(".") and not text.endswith("..")
+        self.held_stop = not ends_open and not at_pause and text.endswith(".") and not text.endswith("..")
         if self.held_stop:
             text = text[:-1]
+        if ends_open:
+            text += " "
+        self.open_end = ends_open
         self.pieces.append(separator + text)
         return self.pieces[-1]
 
