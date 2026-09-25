@@ -28,7 +28,10 @@ also edit `.env` and run `docker compose up -d --build` yourself.
 The first start downloads the Whisper model, which takes a few minutes.
 
 To have speech in any language typed as English, set `WHISPER_VARIANT=translate`
-in `.env` (uses Whisper large-v3). To switch between GPU and CPU, set
+in `.env` (uses Whisper large-v3). In the normal mode, pick your language in
+Settings (100 languages; English by default). **Hinglish** types Hindi in English
+letters ("kya aap meri madad kar sakte hain"), and with English selected any
+word Whisper writes in an Indian script is typed in English letters too. To switch between GPU and CPU, set
 `COMPOSE_PROFILES=gpu` or `cpu` in `.env` and run `docker compose down` first.
 
 ## 2. HTTPS and the microphone

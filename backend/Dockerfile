@@ -1,7 +1,7 @@
 # Whisper server plus the streaming gateway in one container.
 # The gateway reuses the image's own virtualenv (FastAPI, uvicorn, httpx, numpy).
 FROM fedirz/faster-whisper-server:latest-cuda
-COPY backend/gateway/app.py backend/gateway/accounts.py backend/gateway/start.sh /opt/gateway/
+COPY backend/gateway/app.py backend/gateway/accounts.py backend/gateway/hinglish.py backend/gateway/start.sh /opt/gateway/
 COPY backend/gateway/desktop /opt/gateway/desktop
 COPY web /opt/web
 # Decoding options for the bundled Whisper server (WHISPER_BEAM_SIZE).

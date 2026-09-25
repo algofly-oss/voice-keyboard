@@ -32,6 +32,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSoc
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper.vad import get_vad_model  # Silero VAD, bundled with the Whisper image
 
+import hinglish
 from accounts import RateLimiter, Sessions, Store, validate_credentials
 from starlette.background import BackgroundTask
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
@@ -887,6 +888,13 @@ async def stream(ws: WebSocket):
         return
     model = DEFAULT_MODEL  # exactly one model is loaded; requests cannot load another
     language = start.get("language") or ""
+    # "hi-latn" (Hinglish): Whisper recognises Hindi, the text is typed in English
+    # letters. English and translation are also kept in English letters, in case
+    # Whisper writes a word in an Indian script.
+    romanise = language in ("hi-latn", "en") or TRANSLATE
+    if language == "hi-latn":
+        language = "hi"
+    raw_history = ""  # what Whisper wrote (e.g. Devanagari), the best context for its next piece
     user_prompt = start.get("prompt") or ""
     owner = str(start.get("client") or id(ws))
     room = room_for(user)  # accounts dictate independently; one dictation per account
@@ -913,8 +921,11 @@ async def stream(ws: WebSocket):
         while (item := await queue.get()) is not None:
             segment, at_pause = item
             # The end of the previous utterance keeps wording and casing consistent.
-            prompt = " ".join(filter(None, [user_prompt, joiner.text[-200:]]))
-            await send_piece(joiner.add(await transcribe(segment, model, language, prompt), at_pause))
+            nonlocal raw_history
+            prompt = " ".join(filter(None, [user_prompt, raw_history[-200:]]))
+            text = await transcribe(segment, model, language, prompt)
+            raw_history = (raw_history + " " + text).strip()
+            await send_piece(joiner.add(hinglish.to_latin(text) if romanise else text, at_pause))
         await send_piece(joiner.close())
 
     task = asyncio.create_task(worker())
