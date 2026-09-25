@@ -3,7 +3,7 @@
 # The container stops when either process exits.
 trap 'kill 0' TERM INT
 
-# WHISPER_VARIANT picks the model (set it in backend/.env):
+# WHISPER_VARIANT picks the model (set it in .env):
 #   transcribe  large-v3-turbo; types what you say, in the language you say it
 #   translate   large-v3; types an English translation of any spoken language
 #               (turbo was trained without the translate task)

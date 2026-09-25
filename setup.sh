@@ -27,9 +27,10 @@ port_free() {
 command -v docker >/dev/null 2>&1 || { say "Docker is required: https://docs.docker.com/engine/install/"; exit 1; }
 docker compose version >/dev/null 2>&1 || { say "Docker Compose v2 is required."; exit 1; }
 
-# --- Compose settings (.env): where Whisper runs, HTTPS names and ports
+# --- Settings (.env, the only settings file)
 if [ ! -f .env ]; then
   cp .env.example .env
+  created=1
   if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1 && docker info 2>/dev/null | grep -qi nvidia; then
     profile=gpu
   else
@@ -51,13 +52,21 @@ if [ ! -f .env ]; then
   say "Created .env: Whisper on $profile; HTTPS for $names on port $https_port."
 fi
 
-# --- App settings (backend/.env): admin password and session secret
-if [ ! -f backend/.env ]; then
-  cp backend/.env.example backend/.env
+# Releases before settings were unified kept app settings in backend/.env:
+# move them into .env (their values win) and keep the old file as a backup.
+if [ -f backend/.env ]; then
+  while IFS= read -r line; do
+    case "$line" in ''|'#'*) continue ;; esac
+    key=${line%%=*}
+    set_env .env "$key" "${line#*=}"
+  done < backend/.env
+  mv backend/.env backend/.env.migrated
+  say "Moved the settings from backend/.env into .env (backup: backend/.env.migrated)."
+elif [ -n "${created:-}" ]; then
   password=$(rand 16)
-  set_env backend/.env WEB_PASSWORD "$password"
-  set_env backend/.env SESSION_SECRET "$(rand 48)"
-  say "Created backend/.env with a random admin password (shown at the end)."
+  set_env .env WEB_PASSWORD "$password"
+  set_env .env SESSION_SECRET "$(rand 48)"
+  say "Generated a random admin password (shown at the end) and session secret."
 fi
 
 https_port=$(get_env .env HTTPS_PORT); https_port=${https_port:-443}

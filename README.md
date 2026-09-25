@@ -15,7 +15,7 @@ Toolkit) is used if present; otherwise Whisper runs on the CPU, more slowly.
 
 On the first run `setup.sh`:
 
-- creates `.env` (compose settings) and `backend/.env` (app settings) with a
+- creates `.env`, the one settings file (documented in `.env.example`), with a
   random admin password and session secret,
 - picks `gpu` or `cpu`, fills in this machine's names and IP address for the
   HTTPS certificate, and chooses free ports (HTTPS 443, else 8272; HTTP 80, else 8271),
@@ -24,11 +24,11 @@ On the first run `setup.sh`:
   certificate on your devices.
 
 Run it again at any time to redeploy; existing settings are kept. You can
-also edit the two files and run `docker compose up -d --build` yourself.
+also edit `.env` and run `docker compose up -d --build` yourself.
 The first start downloads the Whisper model, which takes a few minutes.
 
 To have speech in any language typed as English, set `WHISPER_VARIANT=translate`
-in `backend/.env` (uses Whisper large-v3). To switch between GPU and CPU, set
+in `.env` (uses Whisper large-v3). To switch between GPU and CPU, set
 `COMPOSE_PROFILES=gpu` or `cpu` in `.env` and run `docker compose down` first.
 
 ## 2. HTTPS and the microphone

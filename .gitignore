@@ -1,4 +1,5 @@
 backend/.env
+backend/.env.migrated
 backend/volumes/
 *.pyc
 __pycache__/

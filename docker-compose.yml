@@ -20,7 +20,7 @@ x-transcription: &transcription
     default:
       aliases: [gateway]  # the name Caddy proxies to, whichever profile runs
   env_file:
-    - path: ./backend/.env
+    - path: ./.env   # the one settings file (see .env.example)
       required: false
   environment: &environment
     TRANSCRIPTION_PORT: "${TRANSCRIPTION_PORT:-8001}"
