@@ -113,6 +113,10 @@ class Store:
         check_password(password, "scrypt$00$00")  # similar timing for unknown users
         return None
 
+    def set_username(self, user_id: int, username: str):
+        """Raises sqlite3.IntegrityError when the name is taken (case-insensitive)."""
+        self._q("UPDATE users SET username=? WHERE id=?", (username, user_id))
+
     def set_password(self, user_id: int, password: str):
         # Bumping the epoch signs out every existing session of this user.
         self._q("UPDATE users SET password_hash=?, session_epoch=session_epoch+1 WHERE id=?",

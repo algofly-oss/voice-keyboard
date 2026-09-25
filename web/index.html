@@ -406,13 +406,15 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 
       <section class="pane" id="pane-account" role="tabpanel" aria-labelledby="tab-account" hidden>
         <div class="group">
-          <div class="group-head"><h3>Signed in as <span id="accountName"></span></h3></div>
-          <div class="field"><label for="pwCurrent">Current password</label>
-            <input id="pwCurrent" type="password" autocomplete="current-password"></div>
+          <div class="group-head"><h3>Your account</h3></div>
+          <div class="field"><label for="accUser">Username</label>
+            <input id="accUser" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
           <div class="field"><label for="pwNew">New password</label>
-            <input id="pwNew" type="password" autocomplete="new-password" minlength="8">
-            <p class="hint">At least 8 characters. Other browsers signed in to this account are signed out.</p></div>
-          <button type="button" class="btn secondary" id="changePassword">Change password</button>
+            <input id="pwNew" type="password" autocomplete="new-password" minlength="8" placeholder="Leave empty to keep it">
+            <p class="hint">At least 8 characters. Changing it signs out other browsers.</p></div>
+          <div class="field"><label for="pwCurrent">Current password</label>
+            <input id="pwCurrent" type="password" autocomplete="current-password" placeholder="Required to save changes"></div>
+          <button type="button" class="btn secondary" id="changePassword">Save changes</button>
         </div>
         <button type="button" class="link-btn danger" id="signOut">Sign out</button>
       </section>
@@ -743,7 +745,7 @@ function lockKeys(locked){$('.keys').classList.toggle('locked',locked);document.
 // ---------- Settings sheet ----------
 const sheet=$('#sheet'),form=$('#form'),saveBtn=$('#save'),tabs=[...document.querySelectorAll('.tabs [role=tab]')];
 function selectTab(name,focus){tabs.forEach((t,i)=>{const on=t.id==='tab-'+name;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1;
-  $('#'+t.getAttribute('aria-controls')).hidden=!on;if(on){if(name==='device')window.onDeviceTab?.();if(name==='account')$('#accountName').textContent=deviceStatus.user||'';$('.sheet-foot').hidden=name!=='general';$('#tabPill').style.transform=`translateX(${i*100}%)`;focus&&t.focus()}})}
+  $('#'+t.getAttribute('aria-controls')).hidden=!on;if(on){if(name==='device')window.onDeviceTab?.();if(name==='account'){$('#accUser').value=deviceStatus.user||'';$('#pwNew').value=$('#pwCurrent').value=''}$('.sheet-foot').hidden=name!=='general';$('#tabPill').style.transform=`translateX(${i*100}%)`;focus&&t.focus()}})}
 tabs.forEach((t,i)=>{t.addEventListener('click',()=>selectTab(t.id.slice(4)));
   t.addEventListener('keydown',e=>{const d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(d)selectTab(tabs[(i+d+tabs.length)%tabs.length].id.slice(4),true)})});
 
@@ -836,12 +838,14 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     pollDevice();
   }
   $('#changePassword').addEventListener('click',async()=>{
-    const current=$('#pwCurrent').value,next=$('#pwNew').value,button=$('#changePassword');
-    if(!current||!next)return toast('Enter the current and the new password',{error:true});
+    const username=$('#accUser').value.trim(),next=$('#pwNew').value,current=$('#pwCurrent').value,button=$('#changePassword');
+    if(username===deviceStatus.user&&!next)return toast('Nothing to change',{error:true});
+    if(!current)return toast('Enter your current password to save',{error:true});
     button.disabled=true;
-    try{const r=await fetch('/api/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current,new:next})});
-      if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||'Could not change the password');
-      $('#pwCurrent').value=$('#pwNew').value='';toast('Password changed')}
+    try{const r=await fetch('/api/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current,username,new:next})});
+      if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||'Could not update the account');
+      $('#pwCurrent').value=$('#pwNew').value='';deviceStatus.user=(await r.json()).username;
+      toast(next?'Account updated':'Username changed');pollDevice()}
     catch(e){toast(e.message,{error:true})}finally{button.disabled=false}
   });
   window.onDeviceTab=()=>{if(!install)loadInstallCommand(false);else renderInstall()};

@@ -56,8 +56,8 @@ Details are in [desktop/README.md](desktop/README.md).
 
 ## Accounts
 
-The first account (`admin`) is created from `WEB_PASSWORD`, and its password
-can be changed later under **Settings → Account**. Set `ALLOW_SIGNUPS=true` to
+The first account (`admin`) is created from `WEB_PASSWORD`. Its username and
+password can be changed later under **Settings → Account**. Set `ALLOW_SIGNUPS=true` to
 let others create accounts on the login page; it is off by default. Each account
 has its own clients, install command, and dictation. All accounts share the
 one Whisper model: if two people dictate at the same moment, their requests

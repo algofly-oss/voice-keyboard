@@ -571,7 +571,9 @@ async def backend_login(request: Request, response: Response):
     if not login_limiter.allow(client_ip(request)):
         raise HTTPException(429, "Too many attempts, wait a moment")
     username, password = await credentials_from(request)
-    user = store.login(username or ADMIN_USERNAME, password)  # blank username = admin (old login page)
+    if not username and (admin := store.admin()):  # blank username = admin (old login page)
+        username = admin["username"]
+    user = store.login(username, password)
     if not user:
         raise HTTPException(401, "Wrong username or password")
     start_session(request, response, user)
@@ -584,18 +586,27 @@ async def backend_logout(request: Request, response: Response):
     return {"ok": True}
 
 
-@app.post("/api/password")
-async def change_password(request: Request, response: Response):
+@app.post("/api/account")
+async def update_account(request: Request, response: Response):
+    """Change the username and/or password; the current password confirms it."""
     user = require_user(request)
     body = await request.json()
     if not store.login(user["username"], str(body.get("current") or "")):
         raise HTTPException(403, "The current password is wrong")
+    username = str(body.get("username") or user["username"]).strip()
     new = str(body.get("new") or "")
-    if (problem := validate_credentials(user["username"], new)):
+    if (problem := validate_credentials(username, new or "unchanged-password")):
         raise HTTPException(400, problem)
-    store.set_password(user["id"], new)  # signs out every other session of this account
-    start_session(request, response, store.user(user["id"]))
-    return {"ok": True}
+    if username != user["username"]:
+        try:
+            store.set_username(user["id"], username)
+        except Exception:
+            raise HTTPException(409, "That username is taken")
+        log.info("Account %r renamed to %r", user["username"], username)
+    if new:
+        store.set_password(user["id"], new)  # signs out every other session of this account
+        start_session(request, response, store.user(user["id"]))
+    return {"ok": True, "username": username}
 
 
 @app.get("/client/install.sh", include_in_schema=False)
