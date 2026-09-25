@@ -7,7 +7,7 @@ the phone itself. (To type on a computer from the phone, use the web app.)
 | --- | --- | --- |
 | Source | [android/](android/README.md) — Kotlin `InputMethodService` | [ios/](ios/README.md) — Swift app + keyboard extension |
 | Records audio in | the keyboard | the containing app (iOS keyboards cannot use the mic) |
-| Distribution | self-signed APK from `/downloads` | unsigned `.ipa` via SideStore/AltStore, or TestFlight |
+| Distribution | self-signed APK from `/downloads` | signed Ad Hoc build from `/downloads` (1 year, auto re-signed), or unsigned `.ipa` via SideStore |
 
 ## Pairing
 

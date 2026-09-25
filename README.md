@@ -54,11 +54,12 @@ On the phone, log in to the web app and open `https://your-host/downloads`.
 1. Install the app.
    - **Android:** tap **Download APK** and allow the one-time "install unknown
      apps" prompt.
-   - **iPhone/iPad:** iOS never runs unsigned apps, so install
-     [SideStore](https://sidestore.io) (or AltStore) once, then tap **Install
-     with SideStore**. It signs the app with your own Apple ID. With a free
-     Apple ID the app must be refreshed every 7 days, which SideStore can do on
-     the phone. A TestFlight link also works if you have a developer account.
+   - **iPhone/iPad:** tap **Register this iPhone** and install the profile it
+     downloads, then tap **Install on this iPhone**. This signed build lasts a
+     year and is re-signed automatically, so you just tap Install again when
+     the date changes. It requires an Apple Developer account and one-time
+     setup; see [mobile/ios/README.md](mobile/ios/README.md). Without an
+     account, a SideStore option is available (7-day refresh).
 2. Tap **Pair this phone**. The app opens and pairs itself with the server.
 3. Enable the keyboard in system settings. On iOS, also turn on **Allow Full
    Access**.

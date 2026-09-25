@@ -22,26 +22,51 @@ not also typed on paired computers.
 
 ## User install
 
-iOS never runs unsigned apps, and a website cannot install one. The lowest-effort
-route without a developer account is sideloading:
+### Signed Ad Hoc install (recommended, needs the $99/yr Apple Developer Program)
 
-1. Install [SideStore](https://sidestore.io) (or AltStore) once, using a
-   computer and your Apple ID.
-2. On the phone, open `https://your-host/downloads` and tap **Install with
-   SideStore**. It downloads the unsigned `.ipa` and signs it with your Apple
-   ID.
-3. On the same page, tap **Pair this phone** and allow the microphone.
-4. **Settings → General → Keyboard → Keyboards → Add New Keyboard → Voice
-   Keyboard**, then turn on **Allow Full Access**. The keyboard needs it to read
-   the shared App Group.
+On the iPhone, log in to the web app, open `/downloads`, and:
 
-With a free Apple ID the signature lasts 7 days; SideStore refreshes it on the
-phone. A paid developer account gives one-year signatures or a TestFlight link
-(`IOS_DOWNLOAD_URL`).
+1. Tap **Register this iPhone**, then open **Settings → Profile Downloaded →
+   Install**. The profile only reports the device ID (UDID) to your server. The
+   server then starts the Ad Hoc workflow, which registers the device with
+   Apple and signs a build that includes it (about 10 minutes).
+2. Tap **Install on this iPhone**. It is a standard over-the-air install, with
+   nothing to trust and no computer needed.
+3. Tap **Pair this phone**, allow the microphone, then add the keyboard in
+   **Settings → General → Keyboard → Keyboards** and turn on **Allow Full
+   Access**.
 
-Sideloading tools rename the App Group when they re-sign. The app works out the
-renamed group at runtime (`SharedStore.appGroup`), so the keyboard and the app
-still share settings. This has not yet been tested on a real device.
+The signature lasts one year. A monthly workflow run re-signs the build when
+less than 30 days remain, and `/downloads` shows the new date. Tap **Install on
+this iPhone** again to renew it; settings and pairing are kept. Apple allows
+100 registered iPhones per membership year.
+
+**One-time setup:**
+
+1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/enroll/).
+2. In App Store Connect → Users and Access → Integrations → App Store Connect
+   API, create a key with the **Admin** role (needed for cloud-managed signing
+   certificates). Download the `.p8` file.
+3. Add the repository secrets:
+
+   ```bash
+   gh secret set APPLE_TEAM_ID  --body XXXXXXXXXX       # Membership details page
+   gh secret set ASC_KEY_ID     --body XXXXXXXXXX
+   gh secret set ASC_ISSUER_ID  --body xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   gh secret set ASC_KEY_P8     < AuthKey_XXXXXXXXXX.p8
+   ```
+
+4. Run `tools/release_mobile.sh <version>`, or run the "Voice Keyboard iOS Ad
+   Hoc" workflow once. Xcode's automatic signing then registers the bundle
+   IDs, the App Group, and the Ad Hoc profile. If `ai.algofly.voicekeyboard`
+   is taken, change the IDs in `project.yml` and `Shared/SharedStore.swift`.
+
+### Sideloading without a developer account
+
+`/downloads` → **No Apple developer account? Sideload instead** offers the
+unsigned `.ipa` for [SideStore](https://sidestore.io) or AltStore. They sign it
+with your free Apple ID, so it must be refreshed every 7 days. The app detects
+the App Group that these tools rename when they re-sign, so it keeps working.
 
 ## Build
 

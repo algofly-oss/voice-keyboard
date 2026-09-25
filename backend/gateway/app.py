@@ -17,8 +17,10 @@ import html
 import json
 import logging
 import os
+import plistlib
 import secrets
 import time
+import uuid
 import wave
 from collections import defaultdict
 from contextlib import asynccontextmanager
@@ -288,13 +290,32 @@ async def web_ui():
     return HTMLResponse(page)
 
 
-RELEASE_FILES = {"android": ("VoiceKeyboard.apk", "application/vnd.android.package-archive"),
-                 "ios": ("VoiceKeyboard.ipa", "application/octet-stream")}
+# Release asset -> (directory under RELEASES_DIR, media type).
+RELEASE_FILES = {"VoiceKeyboard.apk": ("android", "application/vnd.android.package-archive"),
+                 "VoiceKeyboard.ipa": ("ios", "application/octet-stream"),         # unsigned, for SideStore
+                 "VoiceKeyboard-AdHoc.ipa": ("ios", "application/octet-stream"),   # signed for registered iPhones
+                 "ios-adhoc.json": ("ios", "application/json")}                   # expiry and devices of that build
+IOS_DEVICES_FILE = Path(os.environ.get("IOS_DEVICES_FILE", "/data/ios_devices.json"))
+IOS_ADHOC_WORKFLOW = "voice-keyboard-ios-adhoc.yml"
 
 
-def release_path(platform: str) -> Path | None:
-    path = RELEASES_DIR / platform / RELEASE_FILES[platform][0]
+def release_path(filename: str) -> Path | None:
+    path = RELEASES_DIR / RELEASE_FILES[filename][0] / filename
     return path if path.is_file() else None
+
+
+def adhoc_info() -> dict:
+    try:
+        return json.loads((release_path("ios-adhoc.json") or Path("/nonexistent")).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def registered_ios_devices() -> dict:
+    try:
+        return json.loads(IOS_DEVICES_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
 
 
 # Mobile builds are published as GitHub releases tagged voice-keyboard-v*. The
@@ -324,14 +345,14 @@ async def sync_releases() -> str | None:
             state = json.loads(state_file.read_text())
         except (OSError, ValueError):
             state = {}
-        for platform, (filename, _) in RELEASE_FILES.items():
+        for filename, (directory, _) in RELEASE_FILES.items():
             asset = next((a for a in release["assets"] if a["name"] == filename), None)
             if not asset:
                 continue
             version = f"{release['tag_name']}:{asset['id']}:{asset['updated_at']}"
-            if state.get(platform) == version and release_path(platform):
+            if state.get(filename) == version and release_path(filename):
                 continue
-            target = RELEASES_DIR / platform / filename
+            target = RELEASES_DIR / directory / filename
             target.parent.mkdir(parents=True, exist_ok=True)
             partial = target.with_suffix(".part")
             async with github.stream("GET", asset["url"], headers={"Accept": "application/octet-stream"}) as download:
@@ -340,7 +361,8 @@ async def sync_releases() -> str | None:
                     async for chunk in download.aiter_bytes():
                         out.write(chunk)
             partial.replace(target)  # atomic, so /downloads never serves half a file
-            state[platform] = version
+            state[filename] = version
+            state["tag"] = release["tag_name"]
             state_file.write_text(json.dumps(state) + "\n")
             log.info("Downloaded %s from release %s", filename, release["tag_name"])
         return release["tag_name"]
@@ -363,22 +385,37 @@ async def downloads(request: Request):
     """Install page for the mobile keyboards."""
     base = public_base_url(request)
     ios_url = os.environ.get("IOS_DOWNLOAD_URL", "")
+    logged_in = authenticated_request(request)
     ios = []
+    if request.query_params.get("registered"):
+        ios.append('<p class="note">This iPhone is registered. A signed build that includes it is being prepared '
+                   'on GitHub, which takes about 10 minutes. Come back and tap <b>Install on this iPhone</b>.</p>')
     if ios_url:
         ios.append(f'<a class="button" href="{html.escape(ios_url, quote=True)}">Install from TestFlight / App Store</a>')
-    if release_path("ios"):
+    # Registering a device uses one of the 100 yearly Ad Hoc slots, so it needs a login.
+    ios.append('<a class="button secondary" href="/api/ios/register.mobileconfig">1. Register this iPhone</a>'
+               '<p class="muted">Once per iPhone. Safari downloads a profile: '
+               'open Settings → Profile Downloaded → Install. It only reports the device ID to this server.</p>'
+               if logged_in else '<p class="muted"><a href="/">Log in</a> on this iPhone to register it for the signed install.</p>')
+    info = adhoc_info()
+    if release_path("VoiceKeyboard-AdHoc.ipa") and info:
+        manifest = quote(f"{base}/downloads/ios/manifest.plist", safe="")
+        ios += [f'<a class="button" href="itms-services://?action=download-manifest&amp;url={manifest}">2. Install on this iPhone</a>',
+                f'<p class="muted">Signed for {len(info.get("devices", []))} registered device(s). '
+                f'Valid until {html.escape(info.get("expires", "")[:10])}; it is re-signed automatically before then, '
+                'so just tap Install again when this date changes.</p>']
+    if release_path("VoiceKeyboard.ipa"):
         ipa = quote(f"{base}/downloads/ios/VoiceKeyboard.ipa", safe="")
-        ios += [f'<a class="button" href="sidestore://install?url={ipa}">Install with SideStore</a>',
-                f'<a class="button secondary" href="altstore://install?url={ipa}">Install with AltStore</a>',
-                '<a class="plain" href="/downloads/ios/VoiceKeyboard.ipa">Download the .ipa</a>',
-                '<p class="muted">SideStore and AltStore sign the app with your own Apple ID. '
-                'With a free Apple ID it must be refreshed every 7 days (SideStore can do this on the phone).</p>']
-    if not ios:
-        ios.append('<p class="muted">No iOS build published yet.</p>')
+        ios.append('<details><summary>No Apple developer account? Sideload instead</summary>'
+                   f'<a class="button" href="sidestore://install?url={ipa}">Install with SideStore</a>'
+                   f'<a class="button secondary" href="altstore://install?url={ipa}">Install with AltStore</a>'
+                   '<a class="plain" href="/downloads/ios/VoiceKeyboard.ipa">Download the unsigned .ipa</a>'
+                   '<p class="muted">SideStore and AltStore sign the app with your own Apple ID. '
+                   'With a free Apple ID it must be refreshed every 7 days.</p></details>')
     android = ('<a class="button" href="/downloads/android/VoiceKeyboard.apk">Download APK</a>'
                '<p class="muted">Allow the one-time “install unknown apps” prompt when asked.</p>'
-               if release_path("android") else '<p class="muted">No Android build published yet.</p>')
-    if authenticated_request(request):
+               if release_path("VoiceKeyboard.apk") else '<p class="muted">No Android build published yet.</p>')
+    if logged_in:
         # The installed app registers the voicekeyboard:// scheme and exchanges the
         # install token at /api/pair, so pairing is a single tap on the phone.
         pairing = """<p>Open the app once, then tap below to pair this phone with the server.</p>
@@ -397,19 +434,99 @@ a.button,button.button{display:block;width:100%;box-sizing:border-box;text-align
 a.button.secondary{background:#383a40}
 .muted{color:#b5bac1;font-size:.9rem;margin:.4rem 0}
 a{color:#8ea1ff}a.plain{display:block;text-align:center;margin:.4rem 0}
+.note{background:rgba(35,165,90,.14);color:#5fd08f;padding:.8rem 1rem;border-radius:.7rem}
+details{margin-top:1rem}summary{cursor:pointer;color:#b5bac1}
 </style><h1>Voice Keyboard</h1><p>Install the keyboard on this phone, then pair it with your server.</p>
 <h2>Android</h2>""" + android + "<h2>iPhone / iPad</h2>" + "".join(ios) + "<h2>Pair</h2>" + pairing +
                         """<p><a href="/">Back to web app</a></p></html>""")
 
 
+@app.get("/downloads/ios/manifest.plist", include_in_schema=False)
+async def ios_manifest(request: Request):
+    """Over-the-air install manifest for the signed Ad Hoc build (itms-services)."""
+    info = adhoc_info()
+    if not release_path("VoiceKeyboard-AdHoc.ipa") or not info:
+        raise HTTPException(404, "No signed iOS build published")
+    base = public_base_url(request)
+    manifest = {"items": [{
+        "assets": [{"kind": "software-package", "url": f"{base}/downloads/ios/VoiceKeyboard-AdHoc.ipa"}],
+        "metadata": {"bundle-identifier": info["bundleId"], "bundle-version": info.get("bundleVersion", "1"),
+                     "kind": "software", "title": "Voice Keyboard"}}]}
+    return Response(plistlib.dumps(manifest), media_type="application/xml")
+
+
 @app.get("/downloads/{platform}/{filename}", include_in_schema=False)
 async def release_file(platform: str, filename: str):
-    if platform not in RELEASE_FILES or filename != RELEASE_FILES[platform][0]:
+    if RELEASE_FILES.get(filename, ("",))[0] != platform:
         raise HTTPException(404, "Release not found")
-    path = release_path(platform)
+    path = release_path(filename)
     if not path:
         raise HTTPException(404, "No release published")
-    return FileResponse(path, media_type=RELEASE_FILES[platform][1], filename=filename)
+    return FileResponse(path, media_type=RELEASE_FILES[filename][1], filename=filename)
+
+
+@app.get("/api/ios/register.mobileconfig", include_in_schema=False)
+async def ios_register_profile(request: Request):
+    """Apple "Profile Service" profile: installing it makes the iPhone POST its UDID to us."""
+    if not authenticated_request(request):
+        raise HTTPException(401, "Login required")
+    base = public_base_url(request)
+    profile = {
+        "PayloadType": "Profile Service", "PayloadVersion": 1,
+        "PayloadIdentifier": "ai.algofly.voicekeyboard.udid", "PayloadUUID": str(uuid.uuid4()),
+        "PayloadDisplayName": "Voice Keyboard device registration",
+        "PayloadDescription": "Sends this device's ID to your Voice Keyboard server so a signed build can include it. "
+                              "Nothing is installed; the profile is removed automatically.",
+        "PayloadOrganization": "Voice Keyboard",
+        "PayloadContent": {"URL": f"{base}/api/ios/udid?token={quote(current_enrollment())}",
+                           "DeviceAttributes": ["UDID", "PRODUCT", "VERSION", "DEVICE_NAME"],
+                           "Challenge": secrets.token_hex(8)},
+    }
+    return Response(plistlib.dumps(profile), media_type="application/x-apple-aspen-config",
+                    headers={"Content-Disposition": 'attachment; filename="VoiceKeyboard.mobileconfig"'})
+
+
+@app.post("/api/ios/udid", include_in_schema=False)
+async def ios_register_udid(request: Request):
+    """Receives the device attributes from the profile service and starts a signed build."""
+    if not valid_enrollment(request.query_params.get("token")):
+        raise HTTPException(401, "Registration link was replaced")
+    body = await request.body()
+    # The body is a CMS-signed plist; the XML payload sits inside it unencrypted.
+    start, end = body.find(b"<?xml"), body.find(b"</plist>")
+    try:
+        attributes = plistlib.loads(body[start:end + len(b"</plist>")])
+        udid = str(attributes["UDID"])
+    except Exception:
+        raise HTTPException(400, "Unrecognised device response")
+    name = str(attributes.get("DEVICE_NAME") or attributes.get("PRODUCT") or "iPhone")[:60]
+    devices = registered_ios_devices()
+    devices[udid] = {"name": name, "product": attributes.get("PRODUCT", ""), "registered": int(time.time())}
+    IOS_DEVICES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    IOS_DEVICES_FILE.write_text(json.dumps(devices, indent=2) + "\n")
+    log.info("Registered iOS device %s (%s)", name, udid[:8])
+    try:
+        await dispatch_adhoc_build(udid, name)
+    except Exception as e:
+        log.warning("Could not start the signed iOS build: %s", e)
+    # Apple's profile service expects a redirect; Safari then opens that page.
+    return Response(status_code=301, headers={"Location": f"{public_base_url(request)}/downloads?registered=1"})
+
+
+async def dispatch_adhoc_build(udid: str, name: str):
+    """Ask GitHub Actions to register the device with Apple and re-sign the Ad Hoc build."""
+    if not (GITHUB_REPO and GITHUB_TOKEN):
+        raise RuntimeError("GITHUB_REPO/GITHUB_TOKEN not set")
+    try:
+        ref = json.loads((RELEASES_DIR / "release.json").read_text())["tag"]
+    except (OSError, ValueError, KeyError):
+        ref = os.environ.get("GITHUB_BUILD_REF", "main")
+    async with httpx.AsyncClient(timeout=30) as github:
+        response = await github.post(
+            f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{IOS_ADHOC_WORKFLOW}/dispatches",
+            headers={"Authorization": f"Bearer {GITHUB_TOKEN}", "Accept": "application/vnd.github+json"},
+            json={"ref": ref, "inputs": {"udid": udid, "name": name}})
+        response.raise_for_status()
 
 
 @app.get("/api/status")
