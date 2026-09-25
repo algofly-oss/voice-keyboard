@@ -99,6 +99,7 @@ LOWERCASE_AT_SEAM = set(
 )
 
 log = logging.getLogger("gateway")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # per-request lines include signed download URLs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 whisper = httpx.AsyncClient(base_url=WHISPER_URL, timeout=httpx.Timeout(300, connect=5))
 
