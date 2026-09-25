@@ -295,6 +295,10 @@ RELEASE_FILES = {"VoiceKeyboard.apk": ("android", "application/vnd.android.packa
                  "VoiceKeyboard.ipa": ("ios", "application/octet-stream"),         # unsigned, for SideStore
                  "VoiceKeyboard-AdHoc.ipa": ("ios", "application/octet-stream"),   # signed for registered iPhones
                  "ios-adhoc.json": ("ios", "application/json")}                   # expiry and devices of that build
+# Desktop client: one self-contained binary per OS/CPU, fetched by /client/install.*
+DESKTOP_BINARIES = [f"voice-keyboard-{os_}-{arch}{'.exe' if os_ == 'windows' else ''}"
+                    for os_ in ("linux", "darwin", "windows") for arch in ("amd64", "arm64")]
+RELEASE_FILES.update({name: ("desktop", "application/octet-stream") for name in DESKTOP_BINARIES})
 IOS_DEVICES_FILE = Path(os.environ.get("IOS_DEVICES_FILE", "/data/ios_devices.json"))
 IOS_ADHOC_WORKFLOW = "voice-keyboard-ios-adhoc.yml"
 
@@ -622,24 +626,24 @@ async def refresh_api_key(request: Request):
     return {"apiKey": RUNTIME_API_KEY}
 
 
-@app.get("/client/voice_keyboard_client.py", include_in_schema=False)
-async def client_source():
-    return FileResponse(CLIENT_DIR / "voice_keyboard_client.py", media_type="text/x-python")
-
-
 @app.get("/client/install.sh", include_in_schema=False)
 async def install_sh():
     return FileResponse(CLIENT_DIR / "install.sh", media_type="text/plain")
 
 
-@app.get("/client/requirements.txt", include_in_schema=False)
-async def client_requirements():
-    return FileResponse(CLIENT_DIR / "requirements.txt", media_type="text/plain")
-
-
 @app.get("/client/install.ps1", include_in_schema=False)
 async def install_ps1():
     return FileResponse(CLIENT_DIR / "install.ps1", media_type="text/plain")
+
+
+@app.get("/client/{name}", include_in_schema=False)
+async def client_binary(name: str):
+    if name not in DESKTOP_BINARIES:
+        raise HTTPException(404, "Unknown client build")
+    path = release_path(name)
+    if not path:
+        raise HTTPException(404, "Desktop client not published yet; run tools/release.sh")
+    return FileResponse(path, media_type="application/octet-stream", filename=name)
 
 
 @app.websocket("/v1/keyboard")

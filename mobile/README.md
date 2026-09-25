@@ -27,7 +27,7 @@ and insert each `segment` as it arrives. Each device uses its own room,
 Builds live in GitHub Releases (tags `voice-keyboard-v*`), not in git.
 
 ```bash
-tools/release_mobile.sh 1.0.0   # build + sign the APK, tag, create the release
+tools/release.sh 1.0.0   # build + sign the APK, tag, create the release
 ```
 
 The tag starts the "Voice Keyboard iOS" workflow. It builds the unsigned `.ipa` on a

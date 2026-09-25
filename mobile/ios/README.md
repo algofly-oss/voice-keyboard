@@ -56,7 +56,7 @@ this iPhone** again to renew it; settings and pairing are kept. Apple allows
    gh secret set ASC_KEY_P8     < AuthKey_XXXXXXXXXX.p8
    ```
 
-4. Run `tools/release_mobile.sh <version>`, or run the "Voice Keyboard iOS Ad
+4. Run `tools/release.sh <version>`, or run the "Voice Keyboard iOS Ad
    Hoc" workflow once. Xcode's automatic signing then registers the bundle
    IDs, the App Group, and the Ad Hoc profile. If `ai.algofly.voicekeyboard`
    is taken, change the IDs in `project.yml` and `Shared/SharedStore.swift`.
@@ -88,7 +88,7 @@ and microphone support.
 The GitHub Actions workflow `.github/workflows/voice-keyboard-ios.yml` builds it
 on a macOS runner. Branch pushes only check that it compiles; a
 `voice-keyboard-v*` tag attaches the `.ipa` to that GitHub release (see
-`tools/release_mobile.sh`). The backend mirrors it from there.
+`tools/release.sh`). The backend mirrors it from there.
 
 ## Distribute through TestFlight (optional)
 

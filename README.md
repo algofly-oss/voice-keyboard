@@ -36,14 +36,17 @@ the connected computer.
 
 In the web app open **Settings → Computers**, choose the operating system, and
 copy the one-line install command (`curl … | sh` for macOS/Linux, PowerShell
-for Windows). The same command works on any number of computers until you
-click **New command**, which revokes it for new installs; connected computers
-stay connected.
-The client reconnects automatically and types into whichever window has focus:
+for Windows). It downloads a single self-contained program (x86-64 or ARM64)
+with nothing else to install. The program pairs itself and runs in the
+background from then on, including after restarts. The same command works on
+any number of computers until you click **New command**.
 
 ```bash
-voice-keyboard status   # also: start, stop
+voice-keyboard status   # also: stop, start, uninstall
 ```
+
+On macOS, allow it under Privacy & Security → Accessibility when prompted.
+Details are in [desktop/README.md](desktop/README.md).
 
 ### Mobile — `/downloads`
 
@@ -82,7 +85,8 @@ wiring, libraries, board settings, flashing, troubleshooting — is in
 | Path | Contents |
 | --- | --- |
 | `docker-compose.yml` | One-command backend (web UI + API on port 8271) |
-| `backend/` | Dockerfile, FastAPI gateway, desktop client |
+| `backend/` | Dockerfile, FastAPI gateway, desktop installers |
+| `desktop/` | Desktop client (Go; macOS, Linux, Windows) |
 | `mobile/` | Android and iOS client notes; `releases/` for published builds |
 | `esp32/` | Firmware and the web UI source shared with the backend |
 | `tools/` | Build and code-generation scripts |
