@@ -114,6 +114,7 @@ BATCH = Policy(pause_ms=600, min_ms=6000, soft_ms=20000, hard_ms=28000)
 # Whisper ends every chunk with a full stop and capitalizes the next one. When
 # a cut falls mid-sentence, these words are lower-cased again at the seam.
 TRAILING_ELLIPSIS = re.compile(r"(?:\s*…|\s*\.(?:\s*\.)+)+\s*$")  # "...", "…", ". . ."
+LEADING_ELLIPSIS = re.compile(r"^\s*(?:…\s*|\.(?:\s*\.)+\s*)+")
 
 LOWERCASE_AT_SEAM = set(
     "a an the and or but so to of in on at for with from by as is are was were be been it its "
@@ -258,6 +259,7 @@ class Joiner:
     def add(self, text: str, at_pause: bool) -> str:
         # Whisper marks a phrase it thinks was cut off with "..."; type a space
         # instead, so the next piece simply continues the sentence.
+        text = LEADING_ELLIPSIS.sub("", text)  # a piece continuing a cut-off phrase: "...belong"
         trimmed = TRAILING_ELLIPSIS.sub("", text)
         ends_open, text = trimmed != text, trimmed
         if not text:
