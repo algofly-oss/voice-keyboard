@@ -15,8 +15,16 @@ esac
 export WHISPER_VARIANT
 export WHISPER_MODEL="${WHISPER_MODEL:-$default_model}"   # an explicit WHISPER_MODEL still wins
 export WHISPER__MODEL="$WHISPER_MODEL"                     # the model the Whisper server preloads
-export WHISPER__COMPUTE_TYPE="${WHISPER_COMPUTE_TYPE:-int8_float16}"
-echo "Whisper: $WHISPER_VARIANT with $WHISPER_MODEL"
+# WHISPER_DEVICE comes from the compose profile (gpu -> cuda, cpu -> cpu).
+case "${WHISPER_DEVICE:=cuda}" in
+  cuda) default_compute=int8_float16 ;;
+  cpu) default_compute=int8 ;;   # float16 kernels need a GPU
+  *) echo "WHISPER_DEVICE must be cuda or cpu, not '$WHISPER_DEVICE'" >&2; exit 1 ;;
+esac
+export WHISPER__INFERENCE_DEVICE="$WHISPER_DEVICE"
+export WHISPER__COMPUTE_TYPE="${WHISPER_COMPUTE_TYPE:-$default_compute}"
+export WHISPER__CPU_THREADS="${WHISPER_CPU_THREADS:-$(nproc)}"
+echo "Whisper: $WHISPER_VARIANT with $WHISPER_MODEL on $WHISPER_DEVICE ($WHISPER__COMPUTE_TYPE)"
 cd /root/faster-whisper-server
 .venv/bin/uvicorn --factory faster_whisper_server.main:create_app --host 0.0.0.0 --port "${TRANSCRIPTION_PORT:-8001}" &
 .venv/bin/uvicorn --app-dir /opt/gateway app:app --host 0.0.0.0 --port 8000 \

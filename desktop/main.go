@@ -28,6 +28,7 @@ Usage:
   vkeyboard stop        stop and do not start at login
   vkeyboard status      show whether it is running and connected
   vkeyboard logs        show recent log lines and follow new ones (-n 50, --no-follow)
+  vkeyboard config      show or change typing: --method type|paste --delay-ms N|default
   vkeyboard type-test   type a test string after 3 seconds
   vkeyboard uninstall   stop and remove settings and login item
   vkeyboard run         run in the foreground (used by the login item)
@@ -51,6 +52,8 @@ func main() {
 		err = statusCommand()
 	case "logs":
 		err = logsCommand(args)
+	case "config":
+		err = configCommand(args)
 	case "run":
 		err = runCommand()
 	case "type-test":
@@ -90,6 +93,9 @@ func enrollCommand(args []string) error {
 	cfg, err := enroll(ctx, strings.TrimRight(*server, "/"), *token, *name)
 	if err != nil {
 		return err
+	}
+	if old, err := loadConfig(); err == nil { // re-pairing keeps typing preferences
+		cfg.Method, cfg.DelayMs = old.Method, old.DelayMs
 	}
 	if err := saveConfig(cfg); err != nil {
 		return err
@@ -148,11 +154,13 @@ func statusCommand() error {
 			fmt.Printf("Typing:     %s\n", map[bool]string{true: "yes, this is the active client",
 				false: "no, another client is active (Settings → Clients in the web app)"}[*s.Selected])
 		}
+	case s.LastError == "":
+		fmt.Println("Running:    yes, connecting…")
 	default:
 		fmt.Printf("Running:    yes, not connected (%s)\n", s.LastError)
 	}
 	fmt.Printf("Login item: %s\n", map[bool]string{true: "on", false: "off"}[autostartEnabled()])
-	fmt.Printf("Input:      %s\n", typingBackendName())
+	fmt.Printf("Input:      %s, %s\n", typingBackendName(), typingDescription(cfg))
 	if s.running() && s.Warning != "" {
 		fmt.Println("Action:    ", s.Warning)
 	}
@@ -183,7 +191,8 @@ func typeTestCommand(text string) error {
 	if err := checkTypingPermission(true); err != nil {
 		return err
 	}
-	kb, err := newKeyboard()
+	cfg, _ := loadConfig()
+	kb, err := newConfiguredKeyboard(cfg)
 	if err != nil {
 		return err
 	}

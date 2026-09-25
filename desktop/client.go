@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/coder/websocket"
 )
@@ -103,11 +104,12 @@ func enroll(ctx context.Context, server, token, name string) (config, error) {
 func serve(ctx context.Context, cfg config) error {
 	log.Printf("vkeyboard %s starting as %q (%s)", version, cfg.Client, typingBackendName())
 	go watchPermission(ctx)
-	kb := waitForKeyboard(ctx)
+	kb := waitForKeyboard(ctx, cfg)
 	if kb == nil {
 		return nil
 	}
 	defer kb.Close()
+	log.Printf("typing method: %s", typingDescription(cfg))
 	delay := time.Second
 	for {
 		updateState(state{PID: pidSelf(), Since: time.Now()})
@@ -133,9 +135,9 @@ func serve(ctx context.Context, cfg config) error {
 
 // waitForKeyboard retries until typing is possible; at login the display
 // server may not be ready when the login item starts.
-func waitForKeyboard(ctx context.Context) keyboard {
+func waitForKeyboard(ctx context.Context, cfg config) keyboard {
 	for delay := time.Second; ; delay = min(delay*2, 30*time.Second) {
-		kb, err := newKeyboard()
+		kb, err := newConfiguredKeyboard(cfg)
 		if err == nil {
 			return kb
 		}
@@ -205,12 +207,19 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 		}
 		switch m.Type {
 		case "segment":
+			// Only lengths are logged: dictated text can contain passwords.
+			chars, started := utf8.RuneCountInString(m.Text), time.Now()
+			log.Printf("received %d characters", chars)
 			if err := kb.Type(m.Text); err != nil {
 				log.Printf("typing failed: %v", err)
+			} else {
+				log.Printf("typed %d characters in %s", chars, time.Since(started).Round(time.Millisecond))
 			}
 		case "key":
 			if err := kb.Key(m.Key, m.State); err != nil {
 				log.Printf("key %s failed: %v", m.Key, err)
+			} else if m.State == "" || m.State == "press" || m.State == "down" {
+				log.Printf("pressed %s", m.Key)
 			}
 		case "selected":
 			selected := m.Selected

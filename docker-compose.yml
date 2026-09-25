@@ -1,27 +1,43 @@
 name: voice-keyboard
 
+# Choose where Whisper runs with COMPOSE_PROFILES (in ./.env or the shell):
+#   gpu  NVIDIA GPU (default; needs the NVIDIA Container Toolkit)
+#   cpu  CPU only; works on machines without an NVIDIA GPU, or by choice
+# When switching, run `docker compose down` first (both use the same port).
+
+x-transcription: &transcription
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  restart: unless-stopped
+  ports:
+    - "${API_PORT:-8271}:8000"
+  env_file:
+    - path: ./backend/.env
+      required: false
+  environment: &environment
+    TRANSCRIPTION_PORT: "${TRANSCRIPTION_PORT:-8001}"
+    STT_MODEL_TTL: "-1"
+    WHISPER__NUM_WORKERS: "1"
+    ENABLE_UI: "false"
+    LOG_LEVEL: "info"
+  volumes:
+    - ./backend/volumes/huggingface:/root/.cache/huggingface
+    - ./backend/volumes/gateway:/data
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 180s
+
 services:
   transcription:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    restart: unless-stopped
-    ports:
-      - "${API_PORT:-8271}:8000"
-    env_file:
-      - path: ./backend/.env
-        required: false
+    <<: *transcription
+    profiles: [gpu]
     environment:
-      TRANSCRIPTION_PORT: "${TRANSCRIPTION_PORT:-8001}"
-      STT_MODEL_TTL: "-1"
-      WHISPER__INFERENCE_DEVICE: "cuda"
-      WHISPER__NUM_WORKERS: "1"
-      WHISPER__CPU_THREADS: "4"
-      ENABLE_UI: "false"
-      LOG_LEVEL: "info"
-    volumes:
-      - ./backend/volumes/huggingface:/root/.cache/huggingface
-      - ./backend/volumes/gateway:/data
+      <<: *environment
+      WHISPER_DEVICE: cuda
     deploy:
       resources:
         reservations:
@@ -29,9 +45,10 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
+
+  transcription-cpu:
+    <<: *transcription
+    profiles: [cpu]
+    environment:
+      <<: *environment
+      WHISPER_DEVICE: cpu

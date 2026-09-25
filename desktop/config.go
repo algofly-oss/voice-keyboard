@@ -19,6 +19,9 @@ type config struct {
 	Server     string `json:"server"`
 	Client     string `json:"client"`
 	Credential string `json:"credential"`
+	// Typing preferences, changed with `vkeyboard config`.
+	Method  string `json:"method,omitempty"`        // "type" (default) or "paste"
+	DelayMs *int   `json:"typingDelayMs,omitempty"` // nil: the platform default
 }
 
 // state is written by the running client so status/stop can find it.

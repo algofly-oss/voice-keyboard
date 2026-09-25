@@ -132,7 +132,7 @@ func (k *uinputKeyboard) Type(text string) error {
 		if pos[1] == 1 {
 			k.key(keyLeftShift, false)
 		}
-		time.Sleep(2 * time.Millisecond)
+		pause(2 * time.Millisecond)
 	}
 	if skipped > 0 {
 		return fmt.Errorf("skipped %d non-ASCII character(s); uinput can only type US-layout keys", skipped)

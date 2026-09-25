@@ -157,6 +157,7 @@ func (k *x11Keyboard) Type(text string) error {
 		if p, ok := positions[sym]; ok {
 			k.tap(p.code, p.shift)
 			k.xFlush(k.display)
+			pause(0)
 			continue
 		}
 		if k.scratch == 0 {

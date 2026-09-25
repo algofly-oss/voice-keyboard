@@ -22,6 +22,7 @@ var (
 	cgEventCreateKeyboardEvent      func(source uintptr, keycode uint16, down bool) uintptr
 	cgEventKeyboardSetUnicodeString func(event uintptr, length uint64, chars *uint16)
 	cgEventPost                     func(tap uint32, event uintptr)
+	cgEventSetFlags                 func(event uintptr, flags uint64)
 	cfRelease                       func(ref uintptr)
 	cfDictionaryCreate              func(allocator uintptr, keys, values *uintptr, count int64, keyCallbacks, valueCallbacks uintptr) uintptr
 	axIsProcessTrusted              func() bool
@@ -60,6 +61,7 @@ func load() error {
 		purego.RegisterLibFunc(&cgEventCreateKeyboardEvent, cg, "CGEventCreateKeyboardEvent")
 		purego.RegisterLibFunc(&cgEventKeyboardSetUnicodeString, cg, "CGEventKeyboardSetUnicodeString")
 		purego.RegisterLibFunc(&cgEventPost, cg, "CGEventPost")
+		purego.RegisterLibFunc(&cgEventSetFlags, cg, "CGEventSetFlags")
 		purego.RegisterLibFunc(&cfRelease, cf, "CFRelease")
 		purego.RegisterLibFunc(&cfDictionaryCreate, cf, "CFDictionaryCreate")
 		purego.RegisterLibFunc(&axIsProcessTrusted, ax, "AXIsProcessTrusted")
@@ -138,7 +140,7 @@ func (macKeyboard) Type(text string) error {
 			cfRelease(event)
 		}
 		// Some apps (Electron, terminals) drop characters posted back to back.
-		time.Sleep(2 * time.Millisecond)
+		pause(2 * time.Millisecond)
 	}
 	return nil
 }

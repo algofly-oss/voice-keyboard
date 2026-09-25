@@ -6,7 +6,13 @@ GPU with Whisper.
 
 ## 1. Run the backend
 
-Requirements: Docker Compose and an NVIDIA GPU with the NVIDIA Container Toolkit.
+Requirements: Docker Compose. With an NVIDIA GPU (the default) you also need
+the NVIDIA Container Toolkit. To run on the CPU instead, set
+`COMPOSE_PROFILES=cpu` in `./.env`; this works with or without a GPU and is
+slower. Run `docker compose down` before switching.
+
+To have speech in any language typed as English, set `WHISPER_VARIANT=translate`
+in `backend/.env` (uses Whisper large-v3).
 
 ```bash
 cp backend/.env.example backend/.env   # set WEB_PASSWORD and SESSION_SECRET

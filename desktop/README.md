@@ -32,6 +32,7 @@ vkeyboard status      running? connected? selected to type? permission problems?
 vkeyboard logs        recent log lines, then follow live (-n 100, --no-follow)
 vkeyboard stop        stop, and stay off after restarts
 vkeyboard start       start in the background, and at every login
+vkeyboard config      show or change typing: --method type|paste --delay-ms N|default
 vkeyboard type-test   type a test string after 3 seconds
 vkeyboard uninstall   remove settings and the login item
 ```
@@ -62,6 +63,22 @@ whether this client is it. Logs roll over at 1 MB and keep three files
   echo uinput | sudo tee /etc/modules-load.d/vkeyboard.conf
   sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --name-match=uinput
   ```
+
+**Typing method and speed** (`vkeyboard config`, applied immediately):
+
+- `--method type` (default) sends key events. Windows sends each piece in one
+  call and X11 types with no delay. macOS and Wayland pause 2 ms per character
+  by default, because some apps drop characters that arrive faster.
+  `--delay-ms N` changes that pause (`0` = as fast as possible).
+- `--method paste` pastes pieces of 80+ characters through the clipboard and
+  restores it right after (macOS, Windows). It only does so when the clipboard
+  holds plain text, so an image, files or formatting you copied are never
+  lost; otherwise it types. Windows keeps the text out of clipboard history.
+  Linux always types: terminals there paste with Ctrl+Shift+V, and XTest is
+  already instant.
+
+`vkeyboard logs` shows each piece as it is received and typed, with its length
+and timing (not the text itself).
 
 - **Windows:** keys cannot be sent to windows running as administrator unless
   the client runs elevated as well (a Windows security rule, UIPI).

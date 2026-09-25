@@ -71,7 +71,16 @@ func (windowsKeyboard) Type(text string) error {
 				input{typ: inputKeyboard, scan: unit, flags: keyEventUnicode | keyEventKeyUp})
 		}
 	}
-	return send(events)
+	if configuredDelay <= 0 {
+		return send(events) // the whole piece in one call: as fast as Windows allows
+	}
+	for i := 0; i < len(events); i += 2 { // key down + up per character, then pause
+		if err := send(events[i:min(i+2, len(events))]); err != nil {
+			return err
+		}
+		pause(0)
+	}
+	return nil
 }
 
 func (windowsKeyboard) Key(name, state string) error {
