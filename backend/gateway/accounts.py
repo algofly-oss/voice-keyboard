@@ -207,16 +207,20 @@ class Sessions:
 
 
 class RateLimiter:
-    """At most `limit` attempts per key (client IP) in a sliding window."""
+    """At most `limit` failed attempts per key (client IP) in a sliding window;
+    successful sign-ins do not count."""
 
     def __init__(self, limit: int = 10, window: float = 300):
         self._limit, self._window, self._hits = limit, window, {}
 
-    def allow(self, key: str) -> bool:
+    def _recent(self, key: str) -> list[float]:
         now = time.monotonic()
         hits = [t for t in self._hits.get(key, []) if now - t < self._window]
-        allowed = len(hits) < self._limit
-        if allowed:
-            hits.append(now)
         self._hits[key] = hits
-        return allowed
+        return hits
+
+    def allow(self, key: str) -> bool:
+        return len(self._recent(key)) < self._limit
+
+    def failed(self, key: str):
+        self._recent(key).append(time.monotonic())

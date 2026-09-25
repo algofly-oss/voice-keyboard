@@ -11,6 +11,11 @@
 	skip_install_trust
 	auto_https disable_redirects
 	default_sni {$VK_DEFAULT_SNI:localhost}
+	servers {
+		# Keep the visitor's address from proxies on the local network (Traefik,
+		# cloudflared, nginx), so sign-in limits apply per visitor, not per proxy.
+		trusted_proxies static private_ranges
+	}
 	servers :443 {
 		# Plain HTTP sent to the HTTPS port is redirected, not refused.
 		listener_wrappers {

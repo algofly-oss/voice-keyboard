@@ -569,6 +569,7 @@ async def signup(request: Request, response: Response):
         raise HTTPException(429, "Too many attempts, wait a moment")
     username, password = await credentials_from(request)
     if (problem := validate_credentials(username, password)):
+        login_limiter.failed(client_ip(request))
         raise HTTPException(400, problem)
     try:
         user_id = store.create_user(username, password, admin=store.user_count() == 0)
@@ -588,6 +589,7 @@ async def backend_login(request: Request, response: Response):
         username = admin["username"]
     user = store.login(username, password)
     if not user:
+        login_limiter.failed(client_ip(request))
         raise HTTPException(401, "Wrong username or password")
     start_session(request, response, user)
     return {"ok": True}
