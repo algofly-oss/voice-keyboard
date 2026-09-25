@@ -372,6 +372,14 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
           <span class="hint">Each phrase is typed as soon as it is recognized. Turn off to type everything when you stop.</span></span>
           <span class="switch"><input type="checkbox" id="f-live" name="liveTyping" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
         <p class="callout translate-note" hidden><i data-i="alert"></i><span>This server translates: speak any language and it types English.</span></p>
+        <div class="field"><label for="f-pace">Typing speed</label>
+          <select id="f-pace" name="pace">
+            <option value="instant">Instant: types almost word by word</option>
+            <option value="fast">Fast</option>
+            <option value="balanced">Balanced</option>
+            <option value="accurate">Accurate: waits for longer phrases</option>
+          </select>
+          <p class="hint">How soon text is typed while you speak. Slower settings give Whisper more context, which helps accuracy and translation.</p></div>
         <div class="field" id="languageField"><label for="f-language">Language</label>
           <select id="f-language" name="language">
             <option value="">Detect automatically</option><option value="en">English</option><option value="hi">Hindi</option><option value="es">Spanish</option>
@@ -584,7 +592,7 @@ function openStream(){
   let sock;try{sock=new WebSocket(url)}catch{fail('The server URL is not valid.');return false}
   ws=sock;sock.binaryType='arraybuffer';connText='';
   sock.onopen=()=>{
-    sock.send(JSON.stringify({type:'start',language:cfg.language||'',prompt:cfg.prompt||'',model:cfg.model||'',live,client:clientId}));
+    sock.send(JSON.stringify({type:'start',language:cfg.language||'',prompt:cfg.prompt||'',model:cfg.model||'',live,pace:cfg.pace||'fast',client:clientId}));
     for(const chunk of sentLog)sock.send(chunk.data);  // may not have been transcribed before the drop
     const buffered=pending||[];pending=null;buffered.forEach(sendAudio);
     if(reconnecting&&state==='recording')say(live?'Reconnected. Typing as you speak':'Reconnected. Listening…');

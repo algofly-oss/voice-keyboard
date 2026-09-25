@@ -97,10 +97,15 @@ class Policy(NamedTuple):
 
 
 # Live typing wants text quickly; batch mode gives Whisper longer context.
-LIVE = Policy(pause_ms=400, min_ms=1000, soft_ms=5000, hard_ms=8000)
-# Translation needs more context than transcription: fragments come out as
-# unrelated English, so live pieces are longer when translating.
-LIVE_TRANSLATE = Policy(pause_ms=600, min_ms=2500, soft_ms=8000, hard_ms=12000)
+# Live typing speed, chosen in the web UI: shorter pieces type sooner, longer
+# pieces give Whisper more context (translation benefits most).
+PACES = {
+    "instant": Policy(pause_ms=300, min_ms=600, soft_ms=3000, hard_ms=6000),
+    "fast": Policy(pause_ms=400, min_ms=1000, soft_ms=5000, hard_ms=8000),
+    "balanced": Policy(pause_ms=500, min_ms=1800, soft_ms=6500, hard_ms=10000),
+    "accurate": Policy(pause_ms=600, min_ms=2500, soft_ms=8000, hard_ms=12000),
+}
+DEFAULT_PACE = "fast"
 BATCH = Policy(pause_ms=600, min_ms=6000, soft_ms=20000, hard_ms=28000)
 
 # Whisper ends every chunk with a full stop and capitalizes the next one. When
@@ -508,7 +513,8 @@ async def backend_key(request: Request):
 async def backend_settings(request: Request):
     require_user(request)
     return {"liveTyping": True, "language": "", "afterText": "none", "maxSeconds": 600,
-            "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe"}
+            "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe",
+            "pace": DEFAULT_PACE}
 
 
 @app.api_route("/api/enroll", methods=["GET", "POST"])
@@ -875,7 +881,8 @@ async def stream(ws: WebSocket):
         await send_piece(joiner.close())
 
     task = asyncio.create_task(worker())
-    segmenter = Segmenter((LIVE_TRANSLATE if TRANSLATE else LIVE) if live else BATCH)
+    pace = str(start.get("pace") or DEFAULT_PACE)
+    segmenter = Segmenter(PACES.get(pace, PACES[DEFAULT_PACE]) if live else BATCH)
     received = utterances = 0  # for the session log line
     ended = "disconnect"
     try:
