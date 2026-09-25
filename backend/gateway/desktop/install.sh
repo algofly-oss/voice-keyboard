@@ -7,10 +7,12 @@ set -eu
 
 SERVER=""
 TOKEN=""
+TRUST_CA=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --server) SERVER="$2"; shift 2 ;;
     --token) TOKEN="$2"; shift 2 ;;
+    --trust-local-ca) TRUST_CA=1; shift ;;   # the server signs with its own local CA
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -26,6 +28,14 @@ case "$(uname -m)" in
   arm64 | aarch64) arch=arm64 ;;
   *) echo "Unsupported CPU: $(uname -m)" >&2; exit 1 ;;
 esac
+
+# A server with its own local CA: trust it first (this client and browsers need
+# it). Only this first download is unverified; everything after is checked.
+if [ -n "$TRUST_CA" ] && ! curl -fsS "$SERVER/health" >/dev/null 2>&1; then
+  echo "Trusting the server's certificate authority..."
+  curl -fsSLk "$SERVER/client/trust-ca.sh" | sh -s -- "$SERVER"
+  curl -fsS "$SERVER/health" >/dev/null || { echo "Still cannot reach $SERVER over verified HTTPS" >&2; exit 1; }
+fi
 
 bin_dir="$HOME/.local/bin"
 bin="$bin_dir/vkeyboard"

@@ -495,7 +495,11 @@ function serverUrl(path){return new URL(String(cfg.serverUrl||'').replace(/\/+$/
 async function post(url,body){const r=await fetch(url,{method:'POST',body});const t=await r.text();if(!r.ok)throw new Error(t||r.statusText);return t}
 
 // "remote" mirrors a dictation running in another web UI of the same keyboard.
+// A dictation that was running when the tab reloaded resumes after the reload.
+const RESUME_KEY='vk-resume-dictation';
+let awaitingTap=false;
 function setState(next){
+  try{if(next==='recording')sessionStorage.setItem(RESUME_KEY,'1');else if(next==='idle')sessionStorage.removeItem(RESUME_KEY)}catch{}
   state=next;const active=next==='recording'||next==='remote';
   app.classList.toggle('recording',active);
   app.classList.toggle('busy',next==='connecting'||next==='finishing');
@@ -559,7 +563,9 @@ async function startDictation(){
   audio={ctx};
   try{
     audio.stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
-    await resumed;
+    // Right after a reload the browser may hold audio until the user interacts;
+    // build the pipeline anyway and resume on the first tap (resumeOnTap).
+    await Promise.race([resumed,new Promise(r=>setTimeout(r,500))]);
     if(!workletLoaded){await ctx.audioWorklet.addModule(workletUrl);workletLoaded=true}
   }catch(e){teardownAudio();setState('idle');say('Tap the microphone to dictate');
     toast(e.name==='NotAllowedError'?'Microphone access was blocked. Allow it in the browser settings.':'Could not start the microphone.',{error:true});return}
@@ -570,7 +576,7 @@ async function startDictation(){
   // Watchdog: a stalled context would otherwise record nothing without telling anyone.
   lastChunkAt=performance.now();
   ctx.onstatechange=()=>{if(state==='recording'&&ctx.state!=='running')ctx.resume().catch(()=>{})};
-  audio.watch=setInterval(()=>{if(state!=='recording')return;const idle=performance.now()-lastChunkAt;
+  audio.watch=setInterval(()=>{if(state!=='recording'||awaitingTap){lastChunkAt=performance.now();return}const idle=performance.now()-lastChunkAt;
     if(idle>2500)ctx.resume().catch(()=>{});
     if(idle>5000)fail('The microphone stopped sending audio. Please try again.')},1000);
 
@@ -824,9 +830,14 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     $('#runHint').textContent=installOs==='windows'?'Paste this in PowerShell':'Paste this in Terminal';
     // Built from the address in the browser, so a new domain needs no server setting.
     const o=location.origin,t=install?.token;
+    // With the server's own (local) CA, the first download cannot be verified
+    // yet: the installer is fetched without verification, trusts the CA, and
+    // everything after that is verified HTTPS.
+    const local=!!cfg.localCa;
     $('#installCommand').textContent=!install?'Loading…':installOs==='windows'
-      ?`& ([scriptblock]::Create((irm '${o}/client/install.ps1'))) -Server '${o}' -Token '${t}'`
-      :`curl -fsSL ${o}/client/install.sh | sh -s -- --server ${o} --token ${t}`;
+      ?(local?'[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; ':'')+
+        `& ([scriptblock]::Create((irm '${o}/client/install.ps1'))) -Server '${o}' -Token '${t}'${local?' -TrustLocalCa':''}`
+      :`curl -fsSL${local?'k':''} ${o}/client/install.sh | sh -s -- --server ${o} --token ${t}${local?' --trust-local-ca':''}`;
     $('#copyCommand').disabled=!install;
   }
   document.querySelectorAll('[data-install-os]').forEach(tab=>tab.addEventListener('click',()=>{installOs=tab.dataset.installOs;renderInstall()}));
@@ -934,7 +945,18 @@ async function start(){
   pollDevice();pollServer();reconnectEvents();
   if(!started){started=true;setInterval(()=>locked||pollDevice(),3000);setInterval(()=>locked||pollServer(),15000)}
 }
-start();
+start().then(resumeAfterReload);
+
+async function resumeAfterReload(){
+  let wanted=false;try{wanted=sessionStorage.getItem(RESUME_KEY)==='1'}catch{}
+  if(!wanted||state!=='idle'||locked)return;
+  await startDictation();
+  if(state==='recording'&&sharedCtx?.state!=='running'){
+    awaitingTap=true;say('Tap anywhere to continue dictating');
+    const go=()=>{sharedCtx.resume().then(()=>{awaitingTap=false;say(live?'Listening… typing as you speak':'Listening…')})};
+    ['pointerdown','keydown'].forEach(t=>addEventListener(t,go,{once:true,capture:true}));
+  }
+}
 </script>
 </body>
 </html>

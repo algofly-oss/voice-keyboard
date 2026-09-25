@@ -5,10 +5,24 @@
 # login). No administrator rights are needed.
 param(
   [Parameter(Mandatory=$true)][string]$Server,
-  [Parameter(Mandatory=$true)][string]$Token
+  [Parameter(Mandatory=$true)][string]$Token,
+  [switch]$TrustLocalCa   # the server signs with its own local CA
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"   # makes Invoke-WebRequest much faster
+
+# A server with its own local CA: trust it (your user's store; no admin needed).
+# The command that started this script skipped certificate checks only to get
+# here; checks are switched back on before anything else is downloaded.
+if ($TrustLocalCa) {
+  Write-Host "Trusting the server's certificate authority..."
+  $crt = Join-Path $env:TEMP "vkeyboard-ca.crt"
+  [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+  Invoke-WebRequest "$Server/ca.crt" -OutFile $crt -UseBasicParsing
+  Import-Certificate -FilePath $crt -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
+  Remove-Item $crt
+}
+[Net.ServicePointManager]::ServerCertificateValidationCallback = $null
 
 $arch = "amd64"
 try {

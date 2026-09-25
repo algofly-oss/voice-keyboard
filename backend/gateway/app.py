@@ -514,7 +514,9 @@ async def backend_settings(request: Request):
     require_user(request)
     return {"liveTyping": True, "language": "", "afterText": "none", "maxSeconds": 600,
             "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe",
-            "pace": DEFAULT_PACE}
+            "pace": DEFAULT_PACE,
+            # With Caddy's local CA, install commands trust it on first contact.
+            "localCa": os.environ.get("VK_TLS", "internal") == "internal"}
 
 
 @app.api_route("/api/enroll", methods=["GET", "POST"])
@@ -628,6 +630,13 @@ async def install_sh():
 @app.get("/client/trust-ca.sh", include_in_schema=False)
 async def trust_ca_sh():
     return FileResponse(CLIENT_DIR / "trust-ca.sh", media_type="text/plain")
+
+
+@app.get("/client/trust-ca.ps1", include_in_schema=False)
+async def trust_ca_ps1(request: Request):
+    """Filled in with the address it was fetched from, so `irm … | iex` needs no argument."""
+    script = (CLIENT_DIR / "trust-ca.ps1").read_text().replace("__VK_SERVER__", public_base_url(request))
+    return Response(script, media_type="text/plain")
 
 
 @app.get("/client/install.ps1", include_in_schema=False)

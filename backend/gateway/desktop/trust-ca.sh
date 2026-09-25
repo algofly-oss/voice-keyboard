@@ -1,11 +1,13 @@
 #!/bin/sh
 # Trusts this server's local certificate authority, so browsers accept its
 # HTTPS certificate (and allow the microphone) without warnings.
-#   curl -fsSL http://<server>/client/trust-ca.sh | sh -s -- http://<server>
+#   curl -fsSLk https://<server>/client/trust-ca.sh | sh -s -- https://<server>
+# The certificate itself can only be fetched unverified (it is what makes
+# verification possible), like accepting a new SSH host key once.
 set -eu
-server=${1:?usage: trust-ca.sh http://<server>[:port]}
+server=${1:?usage: trust-ca.sh https://<server>[:port]}
 cert=$(mktemp)
-curl -fsSL "$server/ca.crt" -o "$cert"
+curl -fsSLk "$server/ca.crt" -o "$cert"
 grep -q "BEGIN CERTIFICATE" "$cert" || { echo "No CA certificate at $server/ca.crt" >&2; exit 1; }
 case "$(uname -s)" in
   Darwin)
