@@ -17,7 +17,9 @@ apk=$(mktemp -d)/VoiceKeyboard.apk
 cp mobile/android/app/build/outputs/apk/release/app-release.apk "$apk"
 
 git tag -a "$tag" -m "Voice Keyboard $version"
-git push -q origin "$tag"
+# Push with the gh login: a plain git push may pick up an older credential
+# (e.g. ~/.netrc) that lacks the scope GitHub requires for workflow files.
+git push -q "https://x-access-token:$(gh auth token)@github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner).git" "$tag"
 gh release create "$tag" "$apk" --verify-tag --title "Voice Keyboard $version" \
   --notes "Android: VoiceKeyboard.apk. iOS: VoiceKeyboard.ipa is attached by GitHub Actions when its build finishes (unsigned; install with SideStore/AltStore)."
 echo "Released $tag. The backend picks it up within RELEASE_SYNC_SECONDS (or on restart). Watch the iOS build with: gh run watch \$(gh run list --workflow voice-keyboard-ios.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
