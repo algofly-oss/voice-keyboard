@@ -1,6 +1,5 @@
 .git
 .gitignore
 backend/volumes
-esp32/.pio
 __pycache__
 *.pyc

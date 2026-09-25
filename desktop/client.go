@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +27,7 @@ type message struct {
 	Key        string `json:"key"`
 	State      string `json:"state"`
 	Credential string `json:"credential"`
-	Room       string `json:"room"`
+	Selected   bool   `json:"selected"`
 }
 
 const closeBadCredential = 4401
@@ -49,7 +50,7 @@ func keyboardURL(server, token string) (string, error) {
 }
 
 // connect opens the socket and completes the hello/ready handshake.
-func connect(ctx context.Context, server, token, client, room string) (*websocket.Conn, message, error) {
+func connect(ctx context.Context, server, token, client string) (*websocket.Conn, message, error) {
 	address, err := keyboardURL(server, token)
 	if err != nil {
 		return nil, message{}, err
@@ -59,11 +60,14 @@ func connect(ctx context.Context, server, token, client, room string) (*websocke
 		return nil, message{}, err
 	}
 	conn.SetReadLimit(1 << 20)
+	// The server shows these in the web app so the user can tell computers apart.
 	hello, _ := json.Marshal(struct {
-		Type   string `json:"type"`
-		Client string `json:"client"`
-		Room   string `json:"room"`
-	}{"hello", client, room})
+		Type     string `json:"type"`
+		Client   string `json:"client"`
+		Machine  string `json:"machine"`
+		Platform string `json:"platform"`
+		Version  string `json:"version"`
+	}{"hello", client, machineID(), runtime.GOOS + "/" + runtime.GOARCH, version})
 	if err := conn.Write(ctx, websocket.MessageText, hello); err != nil {
 		conn.CloseNow()
 		return nil, message{}, err
@@ -81,7 +85,7 @@ func connect(ctx context.Context, server, token, client, room string) (*websocke
 }
 
 func enroll(ctx context.Context, server, token, name string) (config, error) {
-	conn, ready, err := connect(ctx, server, token, name, "voice-keyboard")
+	conn, ready, err := connect(ctx, server, token, name)
 	if websocket.CloseStatus(err) == closeBadCredential {
 		return config{}, errors.New("the install command was replaced; copy a fresh one from Settings → Computers")
 	}
@@ -89,23 +93,25 @@ func enroll(ctx context.Context, server, token, name string) (config, error) {
 		return config{}, fmt.Errorf("could not reach %s: %w", server, err)
 	}
 	conn.Close(websocket.StatusNormalClosure, "")
-	return config{Server: server, Client: name, Room: "voice-keyboard", Credential: ready.Credential}, nil
+	return config{Server: server, Client: name, Credential: ready.Credential}, nil
 }
 
-// serve keeps a connection open and types what arrives, reconnecting with
-// back-off until ctx is cancelled.
+// serve keeps a connection open and types what arrives. It never gives up:
+// every failure (server down, network change, bad credential, typing backend
+// not ready yet at login, even a panic) is logged and retried with back-off
+// until ctx is cancelled by stop/logout.
 func serve(ctx context.Context, cfg config) error {
-	kb, err := newKeyboard()
-	if err != nil {
-		return err
-	}
-	defer kb.Close()
 	log.Printf("voice-keyboard %s starting as %q (%s)", version, cfg.Client, typingBackendName())
 	go watchPermission(ctx)
+	kb := waitForKeyboard(ctx)
+	if kb == nil {
+		return nil
+	}
+	defer kb.Close()
 	delay := time.Second
 	for {
 		updateState(state{PID: pidSelf(), Since: time.Now()})
-		err := session(ctx, cfg, kb)
+		err := safeSession(ctx, cfg, kb)
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -125,16 +131,52 @@ func serve(ctx context.Context, cfg config) error {
 	}
 }
 
+// waitForKeyboard retries until typing is possible; at login the display
+// server may not be ready when the login item starts.
+func waitForKeyboard(ctx context.Context) keyboard {
+	for delay := time.Second; ; delay = min(delay*2, 30*time.Second) {
+		kb, err := newKeyboard()
+		if err == nil {
+			return kb
+		}
+		log.Printf("cannot type yet: %v; retrying in %s", err, delay)
+		updateState(state{PID: pidSelf(), Since: time.Now(), LastError: "cannot type yet: " + err.Error()})
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(delay):
+		}
+	}
+}
+
+// safeSession turns a panic inside a session into an error so serve retries.
+func safeSession(ctx context.Context, cfg config, kb keyboard) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("internal error: %v", r)
+		}
+	}()
+	return session(ctx, cfg, kb)
+}
+
 func session(ctx context.Context, cfg config, kb keyboard) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	conn, _, err := connect(dialCtx, cfg.Server, cfg.Credential, cfg.Client, cfg.Room)
+	conn, ready, err := connect(dialCtx, cfg.Server, cfg.Credential, cfg.Client)
 	cancel()
 	if err != nil {
 		return err
 	}
 	defer conn.CloseNow()
-	log.Printf("connected to %s", cfg.Server)
-	updateState(state{PID: pidSelf(), Connected: true, Since: time.Now()})
+	if ready.Credential != "" && ready.Credential != cfg.Credential {
+		// The server upgraded an older credential; keep the new one.
+		cfg.Credential = ready.Credential
+		if err := saveConfig(cfg); err != nil {
+			log.Printf("could not save the new credential: %v", err)
+		}
+	}
+	selected := ready.Selected
+	log.Printf("connected to %s (%s)", cfg.Server, selectedText(selected))
+	updateState(state{PID: pidSelf(), Connected: true, Since: time.Now(), Selected: &selected})
 
 	// Pings detect a dead connection (sleep, network change) within ~40 s.
 	pingCtx, stopPing := context.WithCancel(ctx)
@@ -170,6 +212,10 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 			if err := kb.Key(m.Key, m.State); err != nil {
 				log.Printf("key %s failed: %v", m.Key, err)
 			}
+		case "selected":
+			selected := m.Selected
+			log.Print(selectedText(selected))
+			updateState(state{PID: pidSelf(), Connected: true, Since: readState().Since, Selected: &selected})
 		}
 	}
 }
@@ -217,6 +263,13 @@ func watchPermission(ctx context.Context) {
 		case <-time.After(5 * time.Second):
 		}
 	}
+}
+
+func selectedText(selected bool) string {
+	if selected {
+		return "this computer types dictation"
+	}
+	return "another computer is selected to type; pick this one in the web app"
 }
 
 func readJSON(ctx context.Context, conn *websocket.Conn, v any) error {

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="backend-mode">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -218,6 +218,20 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .copy-btn.done{color:#5fd08f}
 .code-meta{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .steps .hint code{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:1px 5px;border-radius:4px;background:var(--elevated);color:var(--muted)}
+.device-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.device-list li.empty{color:var(--subtle);font-size:14px}
+.device{display:flex;align-items:center;gap:6px}
+.device-pick{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--input);color:var(--text);text-align:left}
+.device-pick[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.device-pick .text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.device-pick .title{font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.device-pick .hint{font-size:12px}
+.device-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--subtle)}
+.device-dot.on{background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
+.device-tag{flex:none;font-size:11px;font-weight:700;color:#a5adff;background:var(--accent-soft);padding:2px 7px;border-radius:999px}
+.device .icon-mini{flex:none;width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
+.device .icon-mini svg.i{width:16px;height:16px}
+.login input[type=text]{width:100%}
 .link-btn{border:0;background:none;padding:6px 0;color:#a5adff;font-size:14px;font-weight:600}
 .link-btn:disabled{color:var(--subtle)}
 .link-btn.danger{align-self:center;color:#ff8a8d}
@@ -230,7 +244,6 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .conn[data-state=bad]{border-color:rgba(242,63,67,.35)}.conn[data-state=bad] .conn-dot{background:var(--danger);box-shadow:0 0 0 4px var(--danger-soft)}
 .btn.compact{flex:none;height:36px;padding:0 14px}
 .field>.link-btn{align-self:flex-start;padding:2px 0}
-#pane-device>.esp32-only{display:flex;flex-direction:column;gap:18px}
 .sheet-foot{padding:12px 16px calc(env(safe-area-inset-bottom) + 16px);border-top:1px solid var(--border-soft);background:var(--surface-2)}
 .btn{height:48px;padding:0 18px;border-radius:var(--radius);border:1px solid transparent;font-size:16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,opacity .15s,transform .1s}
 .btn:active{transform:scale(.98)}
@@ -249,8 +262,6 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 }
 /* Login */
 .login{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .25s}
-.backend-mode #bleChip,.backend-mode #bluetooth{display:none!important}
-.backend-mode .esp32-only{display:none!important}
 .login.show{opacity:1;pointer-events:auto}
 .login form{width:min(340px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
 .login .badge{width:64px;height:64px;border-radius:20px;background:var(--accent);color:#fff;display:grid;place-items:center;box-shadow:0 10px 30px rgba(88,101,242,.4);margin-bottom:6px}
@@ -270,10 +281,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
   <header class="topbar">
     <h1 class="sr-only">Voice Keyboard</h1>
     <div class="chips">
-      <span class="chip" id="bleChip" data-state="wait" role="img" aria-label="Keyboard status"><i data-i="bluetooth"></i></span>
       <span class="chip" id="serverChip" data-state="wait" role="img" aria-label="Server status"><i data-i="server"></i></span>
       <span class="chip" id="desktopChip" data-state="wait" role="img" aria-label="Desktop client status"><i data-i="keyboard"></i></span>
-      <button class="icon-btn round" id="bluetooth" aria-pressed="false"><i data-i="keyboardOff"></i></button>
     </div>
     <button class="icon-btn round" id="openSettings" aria-label="Settings" aria-haspopup="dialog"><i data-i="settings"></i></button>
   </header>
@@ -312,12 +321,13 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
   <form id="loginForm" autocomplete="on">
     <div class="badge" aria-hidden="true"><i data-i="mic"></i></div>
     <h2 id="loginTitle">Voice Keyboard</h2>
-    <p>Enter the password to continue</p>
-    <input type="text" name="username" value="voice-keyboard" autocomplete="username" hidden>
+    <p id="loginHint">Sign in to continue</p>
+    <input id="loginUser" name="username" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Username" required>
     <div class="input-group"><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required>
       <button type="button" data-reveal="loginPassword" aria-label="Show password" aria-pressed="false"><i data-i="eye"></i></button></div>
-    <button class="btn primary" id="loginButton">Unlock</button>
+    <button class="btn primary" id="loginButton">Sign in</button>
     <div class="error" id="loginError" aria-live="assertive"></div>
+    <button type="button" class="link-btn" id="loginMode" hidden>Create an account</button>
   </form>
 </div>
 
@@ -331,8 +341,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
     <div class="tabs" role="tablist" aria-label="Settings sections">
       <span class="tab-pill" id="tabPill"></span>
       <button role="tab" id="tab-general" aria-controls="pane-general" aria-selected="true"><i data-i="sliders"></i>General</button>
-      <button role="tab" id="tab-server" aria-controls="pane-server" aria-selected="false" tabindex="-1"><i data-i="server"></i>Server</button>
-      <button role="tab" id="tab-device" aria-controls="pane-device" aria-selected="false" tabindex="-1"><i data-i="cpu"></i>Device</button>
+      <button role="tab" id="tab-device" aria-controls="pane-device" aria-selected="false" tabindex="-1"><i data-i="cpu"></i>Computers</button>
+      <button role="tab" id="tab-account" aria-controls="pane-account" aria-selected="false" tabindex="-1"><i data-i="user"></i>Account</button>
     </div>
     <form class="sheet-body" id="form" novalidate autocomplete="off">
       <section class="pane" id="pane-general" role="tabpanel" aria-labelledby="tab-general">
@@ -356,38 +366,21 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
         <div class="field"><label for="f-max">Stop recording after</label>
           <select id="f-max" name="maxSeconds"><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option>
             <option value="600">10 minutes</option><option value="1800">30 minutes</option><option value="3600">1 hour</option></select></div>
-        <div class="field esp32-only"><label for="f-speed">Typing speed</label>
-          <select id="f-speed" name="keyDelayMs"><option value="0">Ultra fast</option><option value="4">Fast</option><option value="8">Normal</option><option value="20">Reliable</option><option value="40">Slow</option></select>
-          <p class="hint">Use a slower speed if the device misses characters.</p></div>
-      </section>
-
-      <section class="pane" id="pane-server" role="tabpanel" aria-labelledby="tab-server" hidden>
-        <div class="field"><label for="f-url">Server URL</label>
-          <input id="f-url" name="serverUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://whisper.example.com">
-          <p class="hint">The transcription gateway. Use HTTPS when this page is opened over HTTPS.</p></div>
-        <div class="field"><label for="f-key">API key</label>
-          <div class="input-group"><input id="f-key" name="apiKey" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Not required">
-          <button type="button" id="toggleKey" aria-label="Show API key" aria-pressed="false"><i data-i="eye"></i></button></div>
-          <button type="button" class="link-btn backend-only" id="refreshApiKey" hidden>Generate a new API key</button></div>
-        <div class="conn" id="conn" data-state="idle" aria-live="polite">
-          <span class="conn-dot" aria-hidden="true"></span>
-          <span class="text"><span class="title" id="connTitle">Not checked yet</span><span class="hint" id="connDetail">Checks the URL and API key above.</span></span>
-          <button type="button" class="btn secondary compact" id="testServer"><i data-i="activity"></i>Test</button>
-        </div>
         <details><summary>Advanced<i data-i="chevron"></i></summary><div class="inner">
           <div class="field"><label for="f-model">Model</label>
             <input id="f-model" name="model" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
           <div class="field"><label for="f-prompt">Vocabulary</label>
-            <textarea id="f-prompt" name="prompt" rows="3" placeholder="Names, products or jargon, e.g. Kubernetes, Nitin, ESP32"></textarea>
+            <textarea id="f-prompt" name="prompt" rows="3" placeholder="Names, products or jargon, e.g. Kubernetes, PostgreSQL"></textarea>
             <p class="hint">Helps Whisper spell uncommon words correctly.</p></div>
         </div></details>
       </section>
 
       <section class="pane" id="pane-device" role="tabpanel" aria-labelledby="tab-device" hidden>
-        <div class="backend-only" id="desktopClient" hidden>
+        <div id="desktopClient">
           <div class="group">
-            <div class="group-head"><h3>Connected computers</h3><span class="count" id="clientCount">0</span></div>
-            <ul class="client-list" id="clientList" aria-live="polite"></ul>
+            <div class="group-head"><h3>Your computers</h3><span class="count" id="clientCount">0</span></div>
+            <p class="hint">Tap the computer that should type your dictation. Only one types at a time.</p>
+            <ul class="device-list" id="deviceList" aria-live="polite"></ul>
           </div>
           <div class="group">
             <div class="group-head"><h3>Add a computer</h3></div>
@@ -406,22 +399,19 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
             </ol>
           </div>
         </div>
-        <div class="esp32-only">
-        <dl class="about"><dt>IP address</dt><dd id="infoIp">–</dd><dt>Local name</dt><dd id="infoHost">–</dd><dt>Wi-Fi signal</dt><dd id="infoSignal">–</dd><dt>Access point</dt><dd id="infoAp">–</dd></dl>
-        <div class="callout"><i data-i="alert"></i><span>Changing these restarts the keyboard. A new Bluetooth name needs pairing again.</span></div>
-        <div class="field"><label for="f-ble">Bluetooth name</label><input id="f-ble" name="bleName" type="text" maxlength="29" autocapitalize="off"></div>
-        <div class="field"><label for="f-wifi">Wi-Fi network</label><input id="f-wifi" name="wifiName" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-        <div class="field"><label for="f-wifipass">Wi-Fi password</label>
-          <div class="input-group"><input id="f-wifipass" name="wifiPassword" type="password" autocapitalize="off" placeholder="Unchanged">
-          <button type="button" data-reveal="f-wifipass" aria-label="Show Wi-Fi password" aria-pressed="false"><i data-i="eye"></i></button></div></div>
-        <div class="field"><label for="f-host">Hostname</label><input id="f-host" name="hostname" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" pattern="[A-Za-z0-9-]+">
-          <p class="hint" id="hostHint"></p></div>
-        <div class="field"><label for="f-webpass">Web app password</label>
-          <div class="input-group"><input id="f-webpass" name="webPassword" type="password" autocomplete="new-password" placeholder="Unchanged">
-          <button type="button" data-reveal="f-webpass" aria-label="Show password" aria-pressed="false"><i data-i="eye"></i></button></div>
-          <p class="hint">Any text or number. Other devices will need to log in again.</p></div>
+      </section>
+
+      <section class="pane" id="pane-account" role="tabpanel" aria-labelledby="tab-account" hidden>
+        <div class="group">
+          <div class="group-head"><h3>Signed in as <span id="accountName"></span></h3></div>
+          <div class="field"><label for="pwCurrent">Current password</label>
+            <input id="pwCurrent" type="password" autocomplete="current-password"></div>
+          <div class="field"><label for="pwNew">New password</label>
+            <input id="pwNew" type="password" autocomplete="new-password" minlength="8">
+            <p class="hint">At least 8 characters. Other browsers signed in to this account are signed out.</p></div>
+          <button type="button" class="btn secondary" id="changePassword">Change password</button>
         </div>
-        <button type="button" class="link-btn danger" id="signOut">Sign out of this browser</button>
+        <button type="button" class="link-btn danger" id="signOut">Sign out</button>
       </section>
     </form>
     <div class="sheet-foot"><button class="btn primary" id="save" disabled>Save changes</button></div>
@@ -430,7 +420,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 
 <script>
 "use strict";
-const BACKEND_MODE=window.BACKEND_MODE===true;
+const BACKEND_MODE=true;
 // Lucide icons (ISC license), inlined so the page works offline.
 const ICONS={
   mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
@@ -451,6 +441,8 @@ const ICONS={
   eyeOff:'<path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M14.12 14.12a3 3 0 1 1-4.24-4.24M2 2l20 20"/>',
   activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
   sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/>',
+  edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   cpu:'<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
   up:'<path d="m18 15-6-6-6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
@@ -462,7 +454,6 @@ paintIcons();
 
 const $=s=>document.querySelector(s);
 const app=$('#app'),mic=$('#mic'),statusEl=$('#status'),timerEl=$('#timer'),wave=$('#wave'),halo=$('#halo');
-if(BACKEND_MODE){$('#bleChip').hidden=true;$('#bluetooth').hidden=true}else{$('#desktopChip').hidden=true}
 const BARS=31;for(let i=0;i<BARS;i++)wave.appendChild(document.createElement('span'));
 const bars=[...wave.children];
 let cfg={},deviceStatus={},state='idle';
@@ -494,24 +485,12 @@ function setState(next){
 // ---------- Device and server status ----------
 function setChip(el,s,label,full){el.dataset.state=s;el.setAttribute('aria-label',full);el.title=full}
 async function pollDevice(){
-  try{
-    deviceStatus=await (await fetch('/api/status',{cache:'no-store'})).json();
-    if(BACKEND_MODE){
-      const connected=(deviceStatus.clients||0)>0;
-      const names=(deviceStatus.clientList||[]).map(client=>client.id).join(', ');
-      setChip($('#desktopChip'),connected?'ok':'wait',connected?`${deviceStatus.clients} connected`:'No client',connected?`Desktop clients: ${names}`:'No desktop client connected');
-      window.renderClients?.(deviceStatus.clientList||[]);
-      $('#bluetooth').hidden=true;lockKeys(!connected);return;
-    }
-    const {ble,bleEnabled}=deviceStatus;
-    setChip($('#bleChip'),!bleEnabled?'off':ble?'ok':'wait',!bleEnabled?'Off':ble?'Connected':'Waiting',
-      'Keyboard '+(!bleEnabled?'turned off':ble?'connected':'waiting for the device to connect'));
-    showBluetoothButton(bleEnabled);
-    const r=deviceStatus.rssi;$('#infoIp').textContent=deviceStatus.ip;$('#infoHost').textContent=`${cfg.hostname||'voice-keyboard'}.local`;
-    $('#infoSignal').textContent=`${r>-60?'Excellent':r>-70?'Good':r>-80?'Fair':'Weak'} (${r} dBm)`;
-    const aps=deviceStatus.accessPoints||[];$('#infoAp').textContent=`${deviceStatus.bssid||'–'}${aps.length>1?` (1 of ${aps.length} found)`:''}`;
-    lockKeys(!deviceStatus.ble);
-  }catch{setChip($('#bleChip'),'bad','Offline','Keyboard unreachable')}
+  try{deviceStatus=await (await fetch('/api/status',{cache:'no-store'})).json()}catch{return}
+  if(!deviceStatus.devices)return;
+  const sel=deviceStatus.selected;
+  setChip($('#desktopChip'),sel?.online?'ok':sel?'wait':'bad',sel?sel.name:'No computer',
+    sel?`Typing on ${sel.name} (${sel.online?'online':'offline'})`:'No computer selected. Add one in Settings → Computers');
+  renderDevices(deviceStatus.devices);lockKeys(!sel?.online);
 }
 async function checkServer(url){
   const u=new URL(String(url).replace(/\/+$/,'')+'/health',location.href);
@@ -538,13 +517,19 @@ let sharedCtx=null,workletLoaded=false,lastChunkAt=0;
 let audio=null,ws=null,pending=null,stopRequested=false,startedAt=0,frame=0,finishTimer=0,wakeLock=null;
 // Live typing: phrases are posted to the ESP32 in order as they arrive.
 let live=false,typedAny=false,liveChain=Promise.resolve(),liveError=false;
+// Reconnection: if the server drops mid-dictation the mic keeps recording into
+// `pending` and the stream reopens with back-off. `sentLog` holds audio sent
+// since shortly before the last transcribed segment, which the dead connection
+// may not have transcribed yet, so it is replayed first. `carried` keeps text
+// of dropped connections for the final (non-live) result.
+let reconnectTimer=0,retryDelay=1000,carried='',connText='',sentLog=[],sentBytes=0,reconnecting=false;
+const MAX_BUFFER_BYTES=16000*2*300,REPLAY_BYTES=16000*2*30;
 
 async function startDictation(){
   if(state!=='idle')return;
   if(!window.isSecureContext||!navigator.mediaDevices){toast('The microphone needs HTTPS. Open this page through your HTTPS proxy.',{error:true});return}
   if(!cfg.serverUrl){toast('Set the server URL in Settings first.',{error:true,action:'Open',onAction:()=>openSheet('server')});return}
   if(location.protocol==='https:'&&serverUrl('').protocol==='http:'){toast('This page is HTTPS, so the server URL must be HTTPS too.',{error:true,action:'Fix',onAction:()=>openSheet('server')});return}
-  if(!BACKEND_MODE&&deviceStatus.bleEnabled===false)setBluetooth(true);  // Not awaited: the mic must start inside the tap.
   setState('connecting');say('Starting…');
   if(!sharedCtx||sharedCtx.state==='closed'){sharedCtx=new (window.AudioContext||window.webkitAudioContext)();workletLoaded=false}
   const ctx=sharedCtx,resumed=ctx.resume();  // Resumed inside the tap, as iOS requires.
@@ -567,24 +552,61 @@ async function startDictation(){
     if(idle>5000)fail('The microphone stopped sending audio. Please try again.')},1000);
 
   pending=[];stopRequested=false;live=!!cfg.liveTyping;typedAny=false;liveError=false;liveChain=Promise.resolve();
-  const url=serverUrl('/v1/stream');url.protocol=url.protocol==='https:'?'wss:':'ws:';
-  if(cfg.apiKey)url.searchParams.set('token',cfg.apiKey);
-  try{ws=new WebSocket(url)}catch{return fail('The server URL is not valid.')}
-  ws.binaryType='arraybuffer';
-  ws.onopen=()=>{ws.send(JSON.stringify({type:'start',language:cfg.language||'',prompt:cfg.prompt||'',model:cfg.model||'',live,room:room(),client:clientId}));
-    pending.forEach(b=>ws.send(b));pending=null;if(stopRequested)ws.send('{"type":"stop"}')};
-  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='segment'){caption(m.text);if(live)typeLive(m.text)}else if(m.type==='final')finish(m.text);
-    else if(m.type==='remote_stop')stopDictation();else if(m.type==='remote_cancel')discardDictation();
-    else if(m.type==='error')fail('Transcription failed: '+m.message)};
-  ws.onclose=e=>{if(state==='recording'||state==='finishing'||state==='connecting')
-    fail(e.code===4401?'The server rejected the API key.':'Lost connection to the transcription server.')};
+  carried='';connText='';sentLog=[];sentBytes=0;retryDelay=1000;reconnecting=false;
+  if(!openStream())return;
   node.port.onmessage=e=>{
     if(e.data==='flushed')return sendStop();
     lastChunkAt=performance.now();
-    if(pending)pending.push(e.data);else if(ws&&ws.readyState===1)ws.send(e.data);
+    if(pending){pending.push(e.data);trimPending()}else if(ws&&ws.readyState===1)sendAudio(e.data);
   };
   startedAt=performance.now();caption('',true);setState('recording');say(live?'Listening… typing as you speak':'Listening…');draw();
   try{wakeLock=await navigator.wakeLock?.request('screen')}catch{}
+}
+
+function openStream(){
+  const url=serverUrl('/v1/stream');url.protocol=url.protocol==='https:'?'wss:':'ws:';
+  if(cfg.apiKey)url.searchParams.set('token',cfg.apiKey);
+  let sock;try{sock=new WebSocket(url)}catch{fail('The server URL is not valid.');return false}
+  ws=sock;sock.binaryType='arraybuffer';connText='';
+  sock.onopen=()=>{
+    sock.send(JSON.stringify({type:'start',language:cfg.language||'',prompt:cfg.prompt||'',model:cfg.model||'',live,client:clientId}));
+    for(const chunk of sentLog)sock.send(chunk.data);  // may not have been transcribed before the drop
+    const buffered=pending||[];pending=null;buffered.forEach(sendAudio);
+    if(reconnecting&&state==='recording')say(live?'Reconnected. Typing as you speak':'Reconnected. Listening…');
+    if(stopRequested)sock.send('{"type":"stop"}')};
+  sock.onmessage=e=>{if(ws!==sock)return;const m=JSON.parse(e.data);
+    if(m.type==='segment'){reconnecting=false;retryDelay=1000;connText+=m.text;confirmAudio();caption(m.text);if(live)typeLive(m.text)}
+    else if(m.type==='final'){const prior=carried.trim(),last=(m.text||'').trim();finish(prior&&last?prior+' '+last:prior||last)}
+    else if(m.type==='remote_stop')stopDictation();else if(m.type==='remote_cancel')discardDictation();
+    // After a drop the server may not have noticed the old connection yet.
+    else if(m.type==='error'&&reconnecting&&/already dictating/i.test(m.message)){sock.onclose=null;sock.close();connectionLost(sock)}
+    else if(m.type==='error')fail('Transcription failed: '+m.message)};
+  sock.onclose=e=>{if(e.code===4401&&state!=='idle')return fail('The server rejected the API key.');connectionLost(sock)};
+  return true;
+}
+// Keeps dictating through a dropped or unreachable server instead of stopping.
+function connectionLost(sock){
+  if(ws!==sock||state==='idle')return;
+  ws=null;carried+=connText;connText='';reconnecting=true;
+  if(!pending)pending=[];
+  say(state==='finishing'?'Server unreachable. Retrying to finish…':'Server unreachable. Still recording, reconnecting…');
+  clearTimeout(reconnectTimer);
+  reconnectTimer=setTimeout(()=>{if(state!=='idle'&&!ws)openStream()},retryDelay);
+  retryDelay=Math.min(retryDelay*2,10000);
+}
+function sendAudio(data){
+  ws.send(data);sentLog.push({t:performance.now(),data});sentBytes+=data.byteLength;
+  while(sentBytes>REPLAY_BYTES&&sentLog.length>1)sentBytes-=sentLog.shift().data.byteLength;
+}
+// A segment means audio up to about its arrival was transcribed; keep only the
+// last 1.5 s, which may belong to the next utterance.
+function confirmAudio(){
+  const cut=performance.now()-1500;
+  while(sentLog.length&&sentLog[0].t<cut)sentBytes-=sentLog.shift().data.byteLength;
+}
+function trimPending(){
+  let bytes=pending.reduce((n,b)=>n+b.byteLength,0);
+  while(bytes>MAX_BUFFER_BYTES&&pending.length>1)bytes-=pending.shift().byteLength;  // keep the newest 5 minutes
 }
 
 function stopDictation(){
@@ -592,7 +614,7 @@ function stopDictation(){
   setState('finishing');say('Transcribing…');
   audio.node.port.postMessage('flush');  // Send the last partial chunk, then "stop"...
   setTimeout(sendStop,700);              // ...but never wait on a stalled audio thread.
-  finishTimer=setTimeout(()=>fail('The server took too long to respond.'),60000);
+  finishTimer=setTimeout(()=>fail(reconnecting?'Could not reach the server; the end of this dictation was not transcribed.':'The server took too long to respond.'),60000);
 }
 function sendStop(){
   if(stopRequested)return;stopRequested=true;
@@ -610,32 +632,18 @@ async function finish(text){
   cleanup();text=(text||'').trim();
   if(live){setState('idle');await liveChain;
     if(!typedAny)return say('No speech detected');
-    if(BACKEND_MODE)pressAfterKey();else try{await post('/api/type?after=1','')}catch{}  // Only the "after dictation" key.
+    pressAfterKey();  // the gateway already sent the text to the selected computer
     return liveError?say('Some text could not be typed',true):watchTyping();}
   if(!text){setState('idle');say('No speech detected');return}
   setState('idle');await typeOnDevice(text);
 }
 
-function typeLive(text){
-  if(BACKEND_MODE)return; // The gateway routes segments directly to the desktop client.
-  const chunk=text;if(!chunk)return;typedAny=true;  // Pieces arrive with their own separators.
-  liveChain=liveChain.then(async()=>{
-    for(let attempt=0;attempt<25;attempt++){
-      const r=await fetch('/api/type',{method:'POST',body:chunk}).catch(()=>null);
-      if(r&&r.ok)return;
-      const msg=r?await r.text():'Keyboard unreachable';
-      // Retry while the queue is full or the keyboard is still reconnecting.
-      if(!r||!/Still typing|No Bluetooth/.test(msg)){if(!liveError)toast(msg,{error:true});liveError=true;return}
-      await new Promise(res=>setTimeout(res,400));
-    }
-  });
-}
+function typeLive(text){if(text)typedAny=true}  // the gateway delivers text to the selected computer
 
 async function typeOnDevice(text){
-  if(BACKEND_MODE){pressAfterKey();say('Text sent to the connected computer');watchTyping();return}
-  if(!deviceStatus.ble){say('Waiting for the keyboard to connect…');await waitForKeyboard()}
-  try{await post('/api/type?after=1',text);say(`Typing ${text.split(/\s+/).length} words…`);watchTyping()}
-  catch(e){say('Tap the microphone to dictate');toast(e.message,{error:true,action:'Retry',onAction:()=>typeOnDevice(text)})}
+  pressAfterKey();
+  const sel=deviceStatus.selected;
+  say(sel?.online?`Typed on ${sel.name}`:'Transcribed, but no computer is online to type it');
 }
 function watchTyping(){const tick=async()=>{await pollDevice();if(deviceStatus.typing)setTimeout(tick,400);else if(state==='idle')say('Done. Tap the microphone to dictate again')};setTimeout(tick,400)}
 
@@ -644,7 +652,7 @@ function teardownAudio(){if(!audio)return;cancelAnimationFrame(frame);clearInter
   for(const n of [audio.source,audio.node,audio.mute,audio.analyser])try{n?.disconnect()}catch{}
   if(audio.node)audio.node.port.onmessage=null;
   audio.stream?.getTracks().forEach(t=>t.stop());audio.ctx.suspend().catch(()=>{});audio=null}
-function cleanup(){clearTimeout(finishTimer);teardownAudio();if(ws){ws.onclose=null;if(ws.readyState<2)ws.close();ws=null}pending=null;wakeLock?.release().catch(()=>{});wakeLock=null}
+function cleanup(){clearTimeout(finishTimer);clearTimeout(reconnectTimer);sentLog=[];sentBytes=0;carried='';reconnecting=false;teardownAudio();if(ws){ws.onclose=null;if(ws.readyState<2)ws.close();ws=null}pending=null;wakeLock?.release().catch(()=>{});wakeLock=null}
 
 // Level meter and timer.
 const history=new Array(BARS).fill(0);let peak=0,lastBar=0,lastLevelSent=0;
@@ -682,14 +690,13 @@ function caption(piece,reset){
 
 // ---------- Sync with other open web UIs ----------
 const clientId=crypto.randomUUID?.()||String(Math.random()).slice(2);
-const room=()=>cfg.hostname||'voice-keyboard';
 let events=null,remote=null;
 function connectEvents(){
   if(!cfg.serverUrl||(location.protocol==='https:'&&serverUrl('').protocol==='http:'))return;
-  const u=serverUrl('/v1/events');u.protocol=u.protocol==='https:'?'wss:':'ws:';u.searchParams.set('room',room());
+  const u=serverUrl('/v1/events');u.protocol=u.protocol==='https:'?'wss:':'ws:';
   if(cfg.apiKey)u.searchParams.set('token',cfg.apiKey);
   let e;try{e=events=new WebSocket(u)}catch{return}
-  e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.owner===clientId)return;
+  e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.type==='devices')return pollDevice();if(m.owner===clientId)return;
     if(m.type==='state'){if(m.active)enterRemote(m);else if(remote)exitRemote(m.final)}
     else if(m.type==='level'&&remote)remote.level=m.v;
     else if(m.type==='segment'&&remote)caption(m.text)};
@@ -729,19 +736,11 @@ $('#enter').addEventListener('click',()=>sendKey('k=enter'));
 
 // Disconnecting brings back the device's on-screen keyboard; dictating reconnects.
 function lockKeys(locked){$('.keys').classList.toggle('locked',locked);document.querySelectorAll('.keys button').forEach(b=>b.disabled=locked)}
-function showBluetoothButton(enabled){const b=$('#bluetooth');if(!enabled)lockKeys(true);b.classList.toggle('off',!enabled);b.setAttribute('aria-pressed',!enabled);
-  b.querySelector('svg').innerHTML=ICONS[enabled?'keyboardOff':'keyboard'];
-  const label=enabled?'Disconnect the keyboard so the device shows its on-screen keyboard':'Connect the keyboard';b.setAttribute('aria-label',label);b.title=label}
-async function setBluetooth(on){deviceStatus.bleEnabled=on;showBluetoothButton(on);
-  try{await post('/api/bluetooth?on='+(on?1:0));toast(on?'Keyboard reconnecting…':'Keyboard disconnected. The on-screen keyboard is back.')}
-  catch(e){toast(e.message,{error:true})}pollDevice()}
-$('#bluetooth').addEventListener('click',()=>setBluetooth(deviceStatus.bleEnabled===false));
-async function waitForKeyboard(ms=10000){const end=Date.now()+ms;while(Date.now()<end){await pollDevice();if(deviceStatus.ble)return true;await new Promise(r=>setTimeout(r,500))}return false}
 
 // ---------- Settings sheet ----------
 const sheet=$('#sheet'),form=$('#form'),saveBtn=$('#save'),tabs=[...document.querySelectorAll('.tabs [role=tab]')];
 function selectTab(name,focus){tabs.forEach((t,i)=>{const on=t.id==='tab-'+name;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1;
-  $('#'+t.getAttribute('aria-controls')).hidden=!on;if(on){if(name==='device')window.onDeviceTab?.();if(name==='server')testConnection();$('.sheet-foot').hidden=BACKEND_MODE&&name==='device';$('#tabPill').style.transform=`translateX(${i*100}%)`;focus&&t.focus()}})}
+  $('#'+t.getAttribute('aria-controls')).hidden=!on;if(on){if(name==='device')window.onDeviceTab?.();if(name==='account')$('#accountName').textContent=deviceStatus.user||'';$('.sheet-foot').hidden=name!=='general';$('#tabPill').style.transform=`translateX(${i*100}%)`;focus&&t.focus()}})}
 tabs.forEach((t,i)=>{t.addEventListener('click',()=>selectTab(t.id.slice(4)));
   t.addEventListener('keydown',e=>{const d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(d)selectTab(tabs[(i+d+tabs.length)%tabs.length].id.slice(4),true)})});
 
@@ -751,8 +750,7 @@ function fillForm(){
     else if(el.type==='checkbox')el.checked=!!v;
     else if(el.name==='wifiPassword'||el.name==='webPassword')el.value='';
     else if(v!==undefined){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(v)))el.add(new Option(String(v),v));el.value=v}}
-  $('#hostHint').textContent=`Reachable at http://${cfg.hostname||'voice-keyboard'}.local`;
-  setConn('idle','Not checked yet','Checks the URL and API key above.');saveBtn.disabled=true;
+  saveBtn.disabled=true;
 }
 function changes(){const out=new URLSearchParams();
   for(const el of form.querySelectorAll('input[type=checkbox][name]'))if(el.checked!==!!cfg[el.name])out.set(el.name,el.checked?'1':'0');
@@ -778,49 +776,25 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
   const input=b.dataset.reveal?$('#'+b.dataset.reveal):$('#f-key'),show=input.type==='password';input.type=show?'text':'password';
   b.setAttribute('aria-pressed',show);b.querySelector('svg').innerHTML=ICONS[show?'eyeOff':'eye']}));
 
-function setConn(state,title,detail){$('#conn').dataset.state=state;$('#connTitle').textContent=title;$('#connDetail').textContent=detail}
-async function testConnection(){
-  const button=$('#testServer');if(button.disabled)return;button.disabled=true;
-  const url=form.elements.serverUrl.value||cfg.serverUrl,key=form.elements.apiKey.value;
-  if(!url){setConn('bad','No server URL','Enter the transcription server address above.');button.disabled=false;return}
-  setConn('checking','Checking…',url.replace(/^https?:\/\//,''));
-  let r=await checkServer(url);
-  if(r.ok)try{const a=await fetch(new URL(String(url).replace(/\/+$/,'')+'/v1/models',location.href),{headers:key?{Authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(6000)});
-    if(a.status===401)r={ok:false,reason:key?'The API key was rejected':'This server needs an API key'};else if(a.ok)r={ok:true,reason:key?'Server reachable, API key accepted':'Server reachable'}}catch{}
-  setConn(r.ok?'ok':'bad',r.ok?'Connected':'Not connected',r.reason);button.disabled=false}
-$('#testServer').addEventListener('click',testConnection);
 
-saveBtn.addEventListener('click',async()=>{
-  if(BACKEND_MODE)return;
-  const body=changes();if(![...body].length)return;
-  saveBtn.disabled=true;saveBtn.textContent='Saving…';
-  try{const result=await post('/api/settings',body);closeSheet();
-    if(result==='restart'){toast('Saved. The keyboard is restarting…',{duration:6000});setTimeout(()=>location.reload(),8000)}
-    else{toast('Settings saved');await loadSettings();pollServer();reconnectEvents()}}
-  catch(e){toast('Could not save: '+e.message,{error:true})}
-  finally{saveBtn.textContent='Save changes'}
-});
+async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}');cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}}
 
-async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}');cfg={...serverCfg,...saved,serverUrl:serverCfg.serverUrl,apiKey:serverCfg.apiKey}}catch{};$('#desktopClient').hidden=false}}
-
-if(BACKEND_MODE){
-  $('#refreshApiKey').hidden=false;
-  $('#refreshApiKey').addEventListener('click',async()=>{
-    if(!confirm('Refresh the API key? Existing direct API-key clients will need the new key.'))return;
-    const button=$('#refreshApiKey');button.disabled=true;
-    try{const response=await fetch('/api/api-key/refresh',{method:'POST'});if(!response.ok)throw new Error('Could not refresh API key');const result=await response.json();cfg.apiKey=result.apiKey;localStorage.setItem('voice-keyboard-settings',JSON.stringify(cfg));$('#f-key').value=result.apiKey;toast('API key refreshed')}catch(error){toast(error.message,{error:true})}finally{button.disabled=false}
-  });
+{
   saveBtn.addEventListener('click',()=>{
     const body=changes();if(![...body].length)return;
     for(const [key,value] of body)cfg[key]=value;
-    localStorage.setItem('voice-keyboard-settings',JSON.stringify(cfg));
-    saveBtn.disabled=true;closeSheet();toast('Settings saved');pollServer();reconnectEvents();
+    const {serverUrl,...saved}=cfg;localStorage.setItem('voice-keyboard-settings',JSON.stringify(saved));
+    saveBtn.disabled=true;closeSheet();toast('Settings saved');
   });
   let install=null,installOs=/Win/.test(navigator.platform||navigator.userAgent)?'windows':'unix';
   function renderInstall(){
     document.querySelectorAll('[data-install-os]').forEach(tab=>tab.setAttribute('aria-selected',tab.dataset.installOs===installOs));
     $('#runHint').textContent=installOs==='windows'?'Paste this in PowerShell':'Paste this in Terminal';
-    $('#installCommand').textContent=install?(installOs==='windows'?install.powershell:install.shell):'Loading…';
+    // Built from the address in the browser, so a new domain needs no server setting.
+    const o=location.origin,t=install?.token;
+    $('#installCommand').textContent=!install?'Loading…':installOs==='windows'
+      ?`& ([scriptblock]::Create((irm '${o}/client/install.ps1'))) -Server '${o}' -Token '${t}'`
+      :`curl -fsSL ${o}/client/install.sh | sh -s -- --server ${o} --token ${t}`;
     $('#copyCommand').disabled=!install;
   }
   document.querySelectorAll('[data-install-os]').forEach(tab=>tab.addEventListener('click',()=>{installOs=tab.dataset.installOs;renderInstall()}));
@@ -829,17 +803,44 @@ if(BACKEND_MODE){
     if(replace&&!confirm('Create a new install command? The current one will stop working for new installs. Computers already connected are not affected.'))return;
     const button=$('#generateInstall');button.disabled=true;install=null;renderInstall();
     try{
-      const headers=cfg.apiKey?{Authorization:'Bearer '+cfg.apiKey}:{};
-      const response=await fetch('/api/enroll',{method:replace?'POST':'GET',headers});
+      const response=await fetch('/api/enroll',{method:replace?'POST':'GET'});
       if(!response.ok)throw new Error(response.status===401?'Your login session expired. Please log in again.':'Could not load the install command');
       install=await response.json();if(replace)toast('New install command created');
     }catch(error){$('#installCommand').textContent='Could not load the install command.';toast(error.message,{error:true})}
     finally{button.disabled=false;renderInstall()}
   }
-  window.renderClients=clients=>{
-    const list=$('#clientList');list.replaceChildren(...(clients.length?clients.map(client=>{const li=document.createElement('li');li.textContent=client.id;return li}):[Object.assign(document.createElement('li'),{className:'empty',textContent:'No computer connected yet'})]));
-    $('#clientCount').textContent=clients.length;$('#clientCount').classList.toggle('on',clients.length>0);
+  window.renderDevices=devices=>{
+    const list=$('#deviceList');
+    if(!devices.length){list.replaceChildren(Object.assign(document.createElement('li'),{className:'empty',textContent:'No computer yet. Install one below.'}));}
+    else list.replaceChildren(...devices.map(d=>{
+      const li=document.createElement('li');li.className='device';
+      const seen=d.online?'Online':d.lastSeen?'Last seen '+new Date(d.lastSeen*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'Never connected';
+      li.innerHTML=`<button type="button" class="device-pick" aria-pressed="${d.selected}"><span class="device-dot${d.online?' on':''}"></span>`+
+        `<span class="text"><span class="title"></span><span class="hint"></span></span>${d.selected?'<span class="device-tag">Types</span>':''}</button>`+
+        `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename">${svg('edit')}</button>`+
+        `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;
+      li.querySelector('.title').textContent=d.name;
+      li.querySelector('.hint').textContent=[d.platform,d.version&&'v'+d.version,seen].filter(Boolean).join(' · ');
+      li.querySelector('.device-pick').onclick=()=>deviceAction('POST',`/api/devices/${d.id}/select`);
+      li.querySelector('[data-act=rename]').onclick=()=>{const name=prompt('Name for this computer',d.name);if(name&&name.trim()&&name!==d.name)deviceAction('PATCH',`/api/devices/${d.id}`,{name:name.trim()})};
+      li.querySelector('[data-act=remove]').onclick=()=>{if(confirm(`Remove ${d.name}? It stops typing and must be installed again to come back.`))deviceAction('DELETE',`/api/devices/${d.id}`)};
+      return li}));
+    $('#clientCount').textContent=devices.length;$('#clientCount').classList.toggle('on',devices.some(d=>d.online));
   };
+  async function deviceAction(method,url,body){
+    const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+    if(!r.ok)toast((await r.json().catch(()=>({}))).detail||'Could not update the computer',{error:true});
+    pollDevice();
+  }
+  $('#changePassword').addEventListener('click',async()=>{
+    const current=$('#pwCurrent').value,next=$('#pwNew').value,button=$('#changePassword');
+    if(!current||!next)return toast('Enter the current and the new password',{error:true});
+    button.disabled=true;
+    try{const r=await fetch('/api/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current,new:next})});
+      if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||'Could not change the password');
+      $('#pwCurrent').value=$('#pwNew').value='';toast('Password changed')}
+    catch(e){toast(e.message,{error:true})}finally{button.disabled=false}
+  });
   window.onDeviceTab=()=>{if(!install)loadInstallCommand(false);else renderInstall()};
   $('#generateInstall').addEventListener('click',()=>loadInstallCommand(true));
   $('#copyCommand').addEventListener('click',async()=>{
@@ -847,27 +848,34 @@ if(BACKEND_MODE){
     try{await navigator.clipboard.writeText($('#installCommand').textContent)}catch{const range=document.createRange();range.selectNodeContents($('#installCommand'));getSelection().removeAllRanges();getSelection().addRange(range);document.execCommand('copy')}
     button.classList.add('done');button.querySelector('span').textContent='Copied';setTimeout(()=>{button.classList.remove('done');button.querySelector('span').textContent='Copy'},1800);
   });
-  $('#tab-device').lastChild.textContent='Computers';
 }
 
 // ---------- Login ----------
 const nativeFetch=window.fetch.bind(window);let locked=false;
 window.fetch=async(url,opts)=>{const r=await nativeFetch(url,opts);
   if(r.status===401&&String(url).startsWith('/api/')&&!String(url).startsWith('/api/login'))showLogin();return r};
-function showLogin(){if(locked)return;locked=true;if(state==='recording')discardDictation();if(sheet.open)closeSheet();
-  $('#login').classList.add('show');$('#loginError').textContent='';setTimeout(()=>$('#loginPassword').focus(),50)}
-$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();const btn=$('#loginButton'),pw=$('#loginPassword');if(!pw.value)return;
-  btn.disabled=true;btn.textContent='Unlocking…';
-  try{const r=await nativeFetch('/api/login',{method:'POST',body:new URLSearchParams({password:pw.value})});
-    if(!r.ok){$('#loginError').textContent=r.status===401?'Wrong password':r.status===429?'Too many attempts, wait a moment':'Could not log in';e.target.classList.remove('shake');void e.target.offsetWidth;e.target.classList.add('shake');pw.select();return}
+let signupMode=false;
+function setLoginMode(signup){signupMode=signup;
+  $('#loginButton').textContent=signup?'Create account':'Sign in';
+  $('#loginHint').textContent=signup?'Choose a username and password':'Sign in to continue';
+  $('#loginMode').textContent=signup?'I already have an account':'Create an account';
+  $('#loginPassword').autocomplete=signup?'new-password':'current-password';$('#loginError').textContent=''}
+async function showLogin(){if(locked)return;locked=true;if(state==='recording')discardDictation();if(sheet.open)closeSheet();
+  events?.close();setLoginMode(false);$('#login').classList.add('show');setTimeout(()=>$('#loginUser').focus(),50);
+  try{const a=await (await nativeFetch('/api/auth',{cache:'no-store'})).json();$('#loginMode').hidden=!a.signupsAllowed}catch{}}
+$('#loginMode').addEventListener('click',()=>setLoginMode(!signupMode));
+$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();const btn=$('#loginButton'),user=$('#loginUser'),pw=$('#loginPassword');if(!user.value||!pw.value)return;
+  btn.disabled=true;const label=btn.textContent;btn.textContent=signupMode?'Creating…':'Signing in…';
+  try{const r=await nativeFetch(signupMode?'/api/signup':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user.value.trim(),password:pw.value})});
+    if(!r.ok){$('#loginError').textContent=(await r.json().catch(()=>({}))).detail||'Could not sign in';e.target.classList.remove('shake');void e.target.offsetWidth;e.target.classList.add('shake');pw.select();return}
     locked=false;pw.value='';$('#login').classList.remove('show');await start()}
-  catch{$('#loginError').textContent='Cannot reach the keyboard'}
-  finally{btn.disabled=false;btn.textContent='Unlock'}});
+  catch{$('#loginError').textContent='Cannot reach the server'}
+  finally{btn.disabled=false;btn.textContent=label}});
 $('#signOut').addEventListener('click',async()=>{await nativeFetch('/api/logout',{method:'POST'});closeSheet();showLogin()});
 
 let started=false;
 async function start(){
-  try{await loadSettings()}catch(e){if(e.message!=='401')toast('Cannot reach the keyboard.',{error:true});return}
+  try{await loadSettings()}catch(e){if(e.message!=='401')toast('Cannot reach the server.',{error:true});return}
   pollDevice();pollServer();reconnectEvents();
   if(!started){started=true;setInterval(()=>locked||pollDevice(),3000);setInterval(()=>locked||pollServer(),15000)}
 }

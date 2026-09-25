@@ -30,6 +30,8 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper.vad import get_vad_model  # Silero VAD, bundled with the Whisper image
+
+from accounts import RateLimiter, Sessions, Store, validate_credentials
 from starlette.background import BackgroundTask
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
@@ -61,9 +63,15 @@ def load_runtime_api_key() -> str | None:
     return load_auth().get("api_key") or API_KEY
 
 
-RUNTIME_API_KEY = load_runtime_api_key()
+RUNTIME_API_KEY = load_runtime_api_key()  # optional; gives scripts the admin account's access
+# WEB_PASSWORD only seeds the first (admin) account when the database is empty.
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD") or RUNTIME_API_KEY
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 SESSION_SECRET = os.environ.get("SESSION_SECRET") or API_KEY or "development-session-secret"
+ALLOW_SIGNUPS = os.environ.get("ALLOW_SIGNUPS", "false").strip().lower() in {"1", "true", "yes", "on"}
+DATABASE_PATH = Path(os.environ.get("DATABASE_PATH", "/data/voice-keyboard.db"))
+# One Whisper instance serves every account; requests beyond this wait their turn.
+WHISPER_CONCURRENCY = int(os.environ.get("WHISPER_CONCURRENCY", "1"))
 
 SAMPLE_RATE = 16000
 WINDOW = 512                        # Silero VAD analyses 32 ms windows
@@ -75,7 +83,7 @@ CLIENT_DIR = BASE_DIR / "desktop"
 RELEASES_DIR = Path(os.environ.get("RELEASES_DIR", "/data/releases"))
 WEB_SOURCE = Path(os.environ.get("WEB_SOURCE", "/opt/web/index.html"))
 if not WEB_SOURCE.exists():
-    WEB_SOURCE = BASE_DIR.parent.parent.parent / "esp32" / "web" / "index.html"
+    WEB_SOURCE = BASE_DIR.parent.parent / "web" / "index.html"
 
 
 class Policy(NamedTuple):
@@ -101,6 +109,24 @@ log = logging.getLogger("gateway")
 logging.getLogger("httpx").setLevel(logging.WARNING)  # per-request lines include signed download URLs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 whisper = httpx.AsyncClient(base_url=WHISPER_URL, timeout=httpx.Timeout(300, connect=5))
+whisper_slots = asyncio.Semaphore(WHISPER_CONCURRENCY)  # FIFO queue in front of the shared model
+
+store = Store(DATABASE_PATH)
+sessions = Sessions(SESSION_SECRET, store)
+login_limiter = RateLimiter(limit=10, window=300)
+
+
+def migrate_single_user_setup():
+    """Before accounts existed there was one password and one install token.
+    Turn them into the admin account so existing logins and installs keep working."""
+    if store.user_count() or not WEB_PASSWORD:
+        return
+    store.create_user(ADMIN_USERNAME, WEB_PASSWORD, admin=True,
+                      install_token=load_auth().get("enrollment_token"))
+    log.info("Created admin account %r from the previous single-user setup", ADMIN_USERNAME)
+
+
+migrate_single_user_setup()
 
 
 def whisper_headers() -> dict:
@@ -123,12 +149,13 @@ async def transcribe(pcm: np.ndarray, model: str, language: str, prompt: str) ->
         data["language"] = language
     if prompt:
         data["prompt"] = prompt
-    r = await whisper.post(
-        "/v1/audio/transcriptions",
-        data=data,
-        files={"file": ("audio.wav", to_wav(pcm), "audio/wav")},
-        headers=whisper_headers(),
-    )
+    async with whisper_slots:  # dictations of several accounts share the one model in turn
+        r = await whisper.post(
+            "/v1/audio/transcriptions",
+            data=data,
+            files={"file": ("audio.wav", to_wav(pcm), "audio/wav")},
+            headers=whisper_headers(),
+        )
     if r.status_code != 200:
         raise RuntimeError(f"Whisper returned {r.status_code}: {r.text[:200]}")
     return r.json().get("text", "").strip()
@@ -266,8 +293,27 @@ app = FastAPI(title="Voice keyboard gateway", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
-def authorized(token: str | None) -> bool:
-    return RUNTIME_API_KEY is None or token == RUNTIME_API_KEY
+def api_key_user(token: str | None):
+    """The optional API_KEY acts as the admin account (scripts, curl)."""
+    if RUNTIME_API_KEY and token and secrets.compare_digest(token, RUNTIME_API_KEY):
+        return store.admin()
+    return None
+
+
+def request_user(request: Request):
+    bearer = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    return sessions.user(request.cookies.get("vk_session")) or api_key_user(bearer or request.query_params.get("token"))
+
+
+def require_user(request: Request):
+    user = request_user(request)
+    if not user:
+        raise HTTPException(401, "Login required")
+    return user
+
+
+def ws_user(ws: WebSocket):
+    return sessions.user(ws.cookies.get("vk_session")) or api_key_user(request_token(ws))
 
 
 @app.get("/health")
@@ -281,10 +327,7 @@ async def health():
 
 @app.get("/", include_in_schema=False)
 async def web_ui():
-    """Serve the same polished UI used by the ESP32, in backend mode."""
-    page = WEB_SOURCE.read_text(encoding="utf-8")
-    page = page.replace("<script>", "<script>window.BACKEND_MODE=true;document.documentElement.classList.add('backend-mode');</script><script>", 1)
-    return HTMLResponse(page)
+    return HTMLResponse(WEB_SOURCE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
 
 # Desktop client: one self-contained binary per OS/CPU, fetched by /client/install.*
@@ -361,65 +404,147 @@ async def sync_releases_forever():
         await asyncio.sleep(RELEASE_SYNC_SECONDS)
 
 
+def device_json(device, room: "Room", selected_id) -> dict:
+    return {"id": device["id"], "name": device["name"], "platform": device["platform"],
+            "version": device["version"], "online": device["id"] in room.devices,
+            "selected": device["id"] == selected_id, "lastSeen": device["last_seen"]}
+
+
 @app.get("/api/status")
 async def backend_status(request: Request):
-    if not authenticated_request(request):
-        raise HTTPException(401, "Login required")
-    clients = [{"id": client_id, "room": room_name}
-               for room_name, room in rooms.items() for client_id in room.keyboard]
-    return {"ble": bool(clients), "bleEnabled": True, "typing": False, "clients": len(clients),
-            "clientList": clients,
-            "ip": request.url.hostname or "backend", "hostname": request.url.hostname or "backend"}
+    user = require_user(request)
+    room = room_for(user)
+    devices = [device_json(d, room, user["selected_device_id"]) for d in store.devices(user["id"])]
+    return {"user": user["username"], "admin": bool(user["is_admin"]), "devices": devices,
+            "selected": next((d for d in devices if d["selected"]), None)}
+
+
+@app.post("/api/devices/{device_id}/select")
+async def select_device(device_id: int, request: Request):
+    user = require_user(request)
+    if not store.device(user["id"], device_id):
+        raise HTTPException(404, "No such computer")
+    store.select_device(user["id"], device_id)
+    await announce_selection(room_for(store.user(user["id"])))
+    return {"ok": True}
+
+
+@app.patch("/api/devices/{device_id}")
+async def rename_device(device_id: int, request: Request):
+    user = require_user(request)
+    name = str((await request.json()).get("name") or "").strip()[:80]
+    if not name or not store.device(user["id"], device_id):
+        raise HTTPException(400, "Invalid name or computer")
+    store.update_device(device_id, name=name)
+    room_for(user).broadcast({"type": "devices"})
+    return {"ok": True}
+
+
+@app.delete("/api/devices/{device_id}")
+async def remove_device(device_id: int, request: Request):
+    """Revokes the computer's credential; it has to be installed again."""
+    user = require_user(request)
+    if not store.delete_device(user["id"], device_id):
+        raise HTTPException(404, "No such computer")
+    room = room_for(store.user(user["id"]))
+    if (client := room.devices.pop(device_id, None)) is not None:
+        try:
+            await client.close(code=4401, reason="This computer was removed")
+        except Exception:
+            pass
+    await announce_selection(room)
+    return {"ok": True}
 
 
 @app.post("/api/key")
 async def backend_key(request: Request):
-    if not authenticated_request(request):
-        raise HTTPException(401, "Login required")
+    user = require_user(request)
     key = request.query_params.get("k", "")
     state = request.query_params.get("s", "press")
     if key not in {"backspace", "up", "down", "left", "right", "enter", "space"} or state not in {"down", "hold", "up", "press"}:
         raise HTTPException(400, "Unsupported key")
     # Space goes out as text so already-installed desktop clients can type it.
     message = {"type": "segment", "text": " "} if key == "space" else {"type": "key", "key": key, "state": state}
-    await send_keyboard(rooms[request.query_params.get("room") or "voice-keyboard"], message)
+    await send_keyboard(room_for(user), message)
     return {"ok": True}
 
 
 @app.get("/api/settings")
 async def backend_settings(request: Request):
-    if not authenticated_request(request):
-        raise HTTPException(401, "Login required")
-    return {"hostname": "voice-keyboard", "serverUrl": public_base_url(request),
-            "apiKey": RUNTIME_API_KEY or "", "liveTyping": True, "language": "", "afterText": "none",
-            "maxSeconds": 600, "keyDelayMs": 0, "model": DEFAULT_MODEL, "prompt": ""}
+    require_user(request)
+    return {"liveTyping": True, "language": "", "afterText": "none", "maxSeconds": 600,
+            "model": DEFAULT_MODEL, "prompt": ""}
 
 
 @app.api_route("/api/enroll", methods=["GET", "POST"])
 async def enroll(request: Request):
-    """GET returns the current install command; POST replaces its token.
+    """GET returns the account's install token; POST replaces it.
 
     The token does not expire. It keeps working for new installs until the user
-    generates a new one; computers already paired keep their own
+    generates a new one; computers already installed keep their own
     credentials and stay connected.
     """
-    if not authenticated_request(request):
-        raise HTTPException(401, "Login required")
-    token = rotate_enrollment() if request.method == "POST" else current_enrollment()
-    base = public_base_url(request)
-    return {"token": token,
-            "shell": f"curl -fsSL {base}/client/install.sh | sh -s -- --server {base} --token {token}",
-            "powershell": f"& ([scriptblock]::Create((irm '{base}/client/install.ps1'))) -Server '{base}' -Token '{token}'"}
+    user = require_user(request)
+    token = store.rotate_install_token(user["id"]) if request.method == "POST" else user["install_token"]
+    # The web UI builds the install commands from the address in the browser.
+    return {"token": token}
+
+
+def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "")
+
+
+async def credentials_from(request: Request) -> tuple[str, str]:
+    if request.headers.get("content-type", "").startswith("application/json"):
+        body = await request.json()
+        return str(body.get("username") or "").strip(), str(body.get("password") or "")
+    form = parse_qs((await request.body()).decode("utf-8"))
+    return (form.get("username") or [""])[0].strip(), (form.get("password") or [""])[0]
+
+
+def start_session(request: Request, response: Response, user):
+    response.set_cookie("vk_session", sessions.issue(user), max_age=86400 * 30, httponly=True,
+                        secure=public_base_url(request).startswith("https://"), samesite="lax")
+
+
+def signups_open() -> bool:
+    return ALLOW_SIGNUPS or store.user_count() == 0  # the very first account can always be created
+
+
+@app.get("/api/auth")
+async def auth_info(request: Request):
+    user = sessions.user(request.cookies.get("vk_session"))
+    return {"signupsAllowed": signups_open(), "user": user["username"] if user else None}
+
+
+@app.post("/api/signup")
+async def signup(request: Request, response: Response):
+    if not signups_open():
+        raise HTTPException(403, "Sign-ups are disabled on this server")
+    if not login_limiter.allow(client_ip(request)):
+        raise HTTPException(429, "Too many attempts, wait a moment")
+    username, password = await credentials_from(request)
+    if (problem := validate_credentials(username, password)):
+        raise HTTPException(400, problem)
+    try:
+        user_id = store.create_user(username, password, admin=store.user_count() == 0)
+    except Exception:
+        raise HTTPException(409, "That username is taken")
+    log.info("New account %r", username)
+    start_session(request, response, store.user(user_id))
+    return {"ok": True}
 
 
 @app.post("/api/login")
 async def backend_login(request: Request, response: Response):
-    body = parse_qs((await request.body()).decode("utf-8"))
-    password = (body.get("password") or [""])[0]
-    if not WEB_PASSWORD or not secrets.compare_digest(password, WEB_PASSWORD):
-        raise HTTPException(401, "Invalid password")
-    session = session_token()
-    response.set_cookie("vk_session", session, max_age=86400 * 30, httponly=True, secure=public_base_url(request).startswith("https://"), samesite="lax")
+    if not login_limiter.allow(client_ip(request)):
+        raise HTTPException(429, "Too many attempts, wait a moment")
+    username, password = await credentials_from(request)
+    user = store.login(username or ADMIN_USERNAME, password)  # blank username = admin (old login page)
+    if not user:
+        raise HTTPException(401, "Wrong username or password")
+    start_session(request, response, user)
     return {"ok": True}
 
 
@@ -429,14 +554,18 @@ async def backend_logout(request: Request, response: Response):
     return {"ok": True}
 
 
-@app.post("/api/api-key/refresh")
-async def refresh_api_key(request: Request):
-    if not valid_session(request.cookies.get("vk_session")):
-        raise HTTPException(401, "Login required")
-    global RUNTIME_API_KEY
-    RUNTIME_API_KEY = secrets.token_urlsafe(32)
-    save_auth(api_key=RUNTIME_API_KEY)
-    return {"apiKey": RUNTIME_API_KEY}
+@app.post("/api/password")
+async def change_password(request: Request, response: Response):
+    user = require_user(request)
+    body = await request.json()
+    if not store.login(user["username"], str(body.get("current") or "")):
+        raise HTTPException(403, "The current password is wrong")
+    new = str(body.get("new") or "")
+    if (problem := validate_credentials(user["username"], new)):
+        raise HTTPException(400, problem)
+    store.set_password(user["id"], new)  # signs out every other session of this account
+    start_session(request, response, store.user(user["id"]))
+    return {"ok": True}
 
 
 @app.get("/client/install.sh", include_in_schema=False)
@@ -461,32 +590,57 @@ async def client_binary(name: str):
 
 @app.websocket("/v1/keyboard")
 async def keyboard(ws: WebSocket):
-    """Authenticated desktop keyboard client receiving transcription segments."""
+    """A desktop client of one account; it types that account's dictation when selected.
+
+    client -> {"type":"hello","client":"<name>","machine":"<stable id>","platform":"linux/amd64","version":"1.2.0"}
+    server -> {"type":"ready","device":7,"client":"<name>","credential":"…","selected":true}
+    server -> {"type":"selected","selected":false}      when the user picks another computer
+    server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
+    The token is the account's install token (first pairing), the device's
+    credential, or a credential issued before accounts existed.
+    """
     await ws.accept()
-    query_token = request_token(ws)
-    if not authorized(query_token) and not valid_enrollment(query_token) and not valid_client_credential(query_token):
-        await ws.close(code=4401, reason="Invalid enrollment token")
+    token = request_token(ws) or ""
+    device = store.device_by_credential(token)
+    install_user = None if device else store.user_by_install_token(token)
+    legacy = not device and not install_user and (valid_client_credential(token) or api_key_user(token) is not None)
+    if not (device or install_user or legacy):
+        await ws.close(code=4401, reason="Invalid install token or credential")
         return
     try:
         hello = json.loads(await ws.receive_text())
         if hello.get("type") != "hello":
             await ws.close(code=4400, reason="Expected hello")
             return
-        room_name = str(hello.get("room") or "voice-keyboard")[:80]
-        client_id = str(hello.get("client") or secrets.token_hex(8))[:120]
-        credential_client = client_id_from_credential(query_token) if valid_client_credential(query_token) else None
-        if credential_client and credential_client != client_id:
-            await ws.close(code=4401, reason="Credential belongs to another client")
-            return
-        room = rooms[room_name]
-        room.keyboard[client_id] = ws
-        # The shared install token is exchanged for a per-client credential.
-        if valid_enrollment(query_token):
-            client_secret = issue_client_credential(client_id)
+        name = str(hello.get("client") or "computer")[:80]
+        info = {"platform": str(hello.get("platform") or "")[:40], "version": str(hello.get("version") or "")[:40]}
+        credential = token
+        if device:
+            store.update_device(device["id"], last_seen=int(time.time()), **{k: v for k, v in info.items() if v})
+        elif install_user:
+            machine = str(hello.get("machine") or f"name:{name}")[:120]
+            device, credential = store.register_device(install_user["id"], machine, name, **info)
+            log.info("Paired %r for %r", name, install_user["username"])
         else:
-            client_secret = query_token
-        await ws.send_json({"type": "ready", "room": room_name, "client": client_id,
-                            "credential": client_secret})
+            # Installed before accounts existed: it belongs to the admin, keyed by its old client id.
+            admin = store.admin()
+            if not admin:
+                await ws.close(code=4401, reason="No account to attach this computer to")
+                return
+            legacy_id = client_id_from_credential(token) if valid_client_credential(token) else name
+            device = (store.device_by_machine(admin["id"], f"legacy:{legacy_id}")
+                      or store.register_device(admin["id"], f"legacy:{legacy_id}", name, **info)[0])
+        user = store.user(device["user_id"])
+        if user["selected_device_id"] is None:  # an account's first computer types by default
+            store.select_device(user["id"], device["id"])
+            user = store.user(user["id"])
+        room = room_for(user)
+        if (old := room.devices.get(device["id"])) is not None and old is not ws:
+            asyncio.create_task(old.close(code=4000, reason="Replaced by a newer connection"))
+        room.devices[device["id"]] = ws
+        await ws.send_json({"type": "ready", "device": device["id"], "client": device["name"],
+                            "credential": credential, "selected": room.selected == device["id"]})
+        await announce_selection(room, skip=ws)
         while True:
             message = await ws.receive()
             if message.get("type") == "websocket.disconnect":
@@ -498,18 +652,21 @@ async def keyboard(ws: WebSocket):
     except (WebSocketDisconnect, ValueError, KeyError):
         pass
     finally:
-        for room in rooms.values():
-            for client_id, client in list(room.keyboard.items()):
-                if client is ws:
-                    room.keyboard.pop(client_id, None)
+        if device is not None:
+            for room in rooms.values():
+                if room.devices.get(device["id"]) is ws:
+                    room.devices.pop(device["id"], None)
+                    room.broadcast({"type": "devices"})
+            store.update_device(device["id"], last_seen=int(time.time()))
 
 
 class Room:
-    """Web UIs of one keyboard: watchers see the active dictation mirrored."""
+    """One account's live state: its web UIs (watchers), connected computers, and dictation."""
 
     def __init__(self):
         self.watchers: set[WebSocket] = set()
-        self.keyboard: dict[str, WebSocket] = {}
+        self.devices: dict[int, WebSocket] = {}  # device id -> connected desktop client
+        self.selected: int | None = None          # the device that types
         self.active: dict | None = None  # owner, started, live, ws, joiner
 
     def snapshot(self) -> dict:
@@ -530,58 +687,35 @@ class Room:
             self.watchers.discard(watcher)
 
 
-rooms: defaultdict[str, Room] = defaultdict(Room)
+rooms: defaultdict[int, Room] = defaultdict(Room)  # keyed by user id
+
+
+def room_for(user) -> Room:
+    room = rooms[user["id"]]
+    room.selected = user["selected_device_id"]
+    return room
+
+
+async def announce_selection(room: Room, skip: WebSocket | None = None):
+    """Tells each connected computer whether it is the one that types, and the web UIs to refresh."""
+    for device_id, client in list(room.devices.items()):
+        if client is not skip:
+            try:
+                await client.send_json({"type": "selected", "selected": device_id == room.selected})
+            except Exception:
+                room.devices.pop(device_id, None)
+    room.broadcast({"type": "devices"})
 
 
 def request_token(ws: WebSocket) -> str | None:
     return ws.query_params.get("token") or ws.headers.get("authorization", "").removeprefix("Bearer ").strip() or None
 
 
-def authenticated_request(request: Request) -> bool:
-    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-    return authorized(token or request.query_params.get("token")) or valid_session(request.cookies.get("vk_session"))
-
-
-def session_token() -> str:
-    payload = f"{secrets.token_urlsafe(24)}:{int(time.time()) + 86400 * 30}"
-    signature = hmac.new(SESSION_SECRET.encode(), payload.encode(), "sha256").hexdigest()
-    return f"{payload}:{signature}"
-
-
-def valid_session(token: str | None) -> bool:
-    if not token:
-        return False
-    try:
-        nonce, expiry, signature = token.rsplit(":", 2)
-        payload = f"{nonce}:{expiry}"
-        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), "sha256").hexdigest()
-        return int(expiry) >= int(time.time()) and hmac.compare_digest(signature, expected)
-    except (ValueError, TypeError):
-        return False
-
-
 def public_base_url(request: Request) -> str:
-    configured = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
-    if configured:
-        return configured
+    """The origin the client used, so changing domains needs no configuration."""
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip()
     host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc)).split(",", 1)[0].strip()
     return f"{scheme}://{host}".rstrip("/")
-
-
-def current_enrollment() -> str:
-    return load_auth().get("enrollment_token") or rotate_enrollment()
-
-
-def rotate_enrollment() -> str:
-    token = secrets.token_urlsafe(24)
-    save_auth(enrollment_token=token)
-    return token
-
-
-def valid_enrollment(token: str | None) -> bool:
-    stored = load_auth().get("enrollment_token")
-    return bool(token and stored and secrets.compare_digest(token, stored))
 
 
 def valid_client_credential(token: str | None) -> bool:
@@ -602,20 +736,15 @@ def client_id_from_credential(token: str) -> str | None:
         return None
 
 
-def issue_client_credential(client_id: str) -> str:
-    encoded_client = base64.urlsafe_b64encode(client_id.encode()).decode()
-    expiry = str(int(time.time()) + 365 * 24 * 3600)
-    payload = f"{encoded_client}:{expiry}"
-    signature = hmac.new(SESSION_SECRET.encode(), payload.encode(), "sha256").hexdigest()
-    return f"{payload}:{signature}"
-
-
 async def send_keyboard(room: Room, message: dict):
-    for client_id, client in list(room.keyboard.items()):
-        try:
-            await client.send_json(message)
-        except Exception:
-            room.keyboard.pop(client_id, None)
+    """Only the account's selected computer types."""
+    client = room.devices.get(room.selected)
+    if client is None:
+        return
+    try:
+        await client.send_json(message)
+    except Exception:
+        room.devices.pop(room.selected, None)
 
 
 @app.websocket("/v1/events")
@@ -628,10 +757,10 @@ async def events(ws: WebSocket):
     client -> {"type":"stop"} or {"type":"cancel"}  to end another device's dictation
     """
     await ws.accept()  # Accept first so the browser sees the 4401 close code.
-    if not authorized(request_token(ws)):
-        await ws.close(code=4401, reason="Invalid API key")
+    if not (user := ws_user(ws)):
+        await ws.close(code=4401, reason="Login required")
         return
-    room = rooms[ws.query_params.get("room") or "default"]
+    room = room_for(user)
     room.watchers.add(ws)
     try:
         await ws.send_json(room.snapshot())
@@ -649,7 +778,7 @@ async def events(ws: WebSocket):
 async def stream(ws: WebSocket):
     """Protocol:
     client -> {"type":"start","language":"en","prompt":"...","model":"...","live":true,
-               "room":"voice-keyboard","client":"<id>"}
+               "client":"<id>"}   authenticated by the session cookie (or ?token=API_KEY)
     client -> binary frames of 16 kHz mono little-endian int16 PCM
     client -> {"type":"level","v":0.4}  (optional, mirrored to other web UIs)
     client -> {"type":"stop"}  (or {"type":"cancel"})
@@ -660,8 +789,8 @@ async def stream(ws: WebSocket):
     server -> {"type":"error","message":"..."}
     """
     await ws.accept()  # Accept first so the browser sees the 4401 close code.
-    if not authorized(request_token(ws)):
-        await ws.close(code=4401, reason="Invalid API key")
+    if not (user := ws_user(ws)):
+        await ws.close(code=4401, reason="Login required")
         return
     try:
         start = json.loads(await ws.receive_text())
@@ -671,9 +800,9 @@ async def stream(ws: WebSocket):
     language = start.get("language") or ""
     user_prompt = start.get("prompt") or ""
     owner = str(start.get("client") or id(ws))
-    room = rooms[start.get("room") or "default"]
+    room = room_for(user)  # accounts dictate independently; one dictation per account
     if room.active:
-        # One dictation per keyboard; two would type over each other.
+        # Two dictations of one account would type over each other.
         await ws.send_json({"type": "error", "message": "Another device is already dictating"})
         await ws.close()
         return
@@ -760,9 +889,8 @@ async def stream(ws: WebSocket):
 @app.api_route("/v1/{path:path}", methods=["GET", "POST"])
 async def passthrough(path: str, request: Request):
     """OpenAI-compatible endpoints (e.g. /v1/audio/transcriptions) of the Whisper server."""
-    auth = request.headers.get("authorization", "")
-    if not authorized(auth.removeprefix("Bearer ").strip() or request.query_params.get("token")):
-        raise HTTPException(401, "Invalid API key")
+    if not request_user(request):
+        raise HTTPException(401, "Login or API key required")
     headers = {"content-type": request.headers.get("content-type", "")} | whisper_headers()
     upstream = whisper.build_request(
         request.method, f"/v1/{path}", params=request.query_params, headers=headers, content=request.stream()

@@ -28,7 +28,8 @@ Running the command again upgrades the client in place.
 ## Use
 
 ```text
-voice-keyboard status      running? connected? permission problems?
+voice-keyboard status      running? connected? selected to type? permission problems?
+voice-keyboard logs        recent log lines, then follow live (-n 100, --no-follow)
 voice-keyboard stop        stop, and stay off after restarts
 voice-keyboard start       start in the background, and at every login
 voice-keyboard type-test   type a test string after 3 seconds
@@ -37,8 +38,14 @@ voice-keyboard uninstall   remove settings and the login item
 
 `start` and `stop` return immediately; the client itself runs detached from
 the terminal. After `start` it comes back automatically after every restart or
-login until you run `stop`. Logs go to `voice-keyboard.log` in the config
-directory shown by `status`.
+login until you run `stop`. It never gives up on the server: every failure
+(network change, server restart, a display that isn't ready yet at login) is
+retried with back-off.
+
+Each computer appears in the web UI under **Settings → Computers** with its
+name, OS/CPU, and version. Only the selected one types, and `status` shows
+whether this computer is it. Logs roll over at 1 MB and keep three files
+(`voice-keyboard.log`, `.1`, `.2`) in the config directory shown by `status`.
 
 **Platform notes**
 

@@ -1,8 +1,5 @@
-build/
 backend/.env
 backend/volumes/
-esp32/.env
-esp32/firmware_config.h
 *.pyc
 __pycache__/
 desktop/voice-keyboard

@@ -27,6 +27,7 @@ Usage:
   voice-keyboard start       start now and at every login
   voice-keyboard stop        stop and do not start at login
   voice-keyboard status      show whether it is running and connected
+  voice-keyboard logs        show recent log lines and follow new ones (-n 50, --no-follow)
   voice-keyboard type-test   type a test string after 3 seconds
   voice-keyboard uninstall   stop and remove settings and login item
   voice-keyboard run         run in the foreground (used by the login item)
@@ -48,6 +49,8 @@ func main() {
 		err = stopCommand()
 	case "status":
 		err = statusCommand()
+	case "logs":
+		err = logsCommand(args)
 	case "run":
 		err = runCommand()
 	case "type-test":
@@ -140,11 +143,15 @@ func statusCommand() error {
 		fmt.Println("Running:    no (start it with: voice-keyboard start)")
 	case s.Connected:
 		fmt.Printf("Running:    yes, connected since %s\n", s.Since.Local().Format("Jan 2 15:04"))
+		if s.Selected != nil {
+			fmt.Printf("Typing:     %s\n", map[bool]string{true: "yes, this computer types dictation",
+				false: "no, another computer is selected (Settings → Computers in the web app)"}[*s.Selected])
+		}
 	default:
 		fmt.Printf("Running:    yes, not connected (%s)\n", s.LastError)
 	}
 	fmt.Printf("Login item: %s\n", map[bool]string{true: "on", false: "off"}[autostartEnabled()])
-	fmt.Printf("Typing:     %s\n", typingBackendName())
+	fmt.Printf("Input:      %s\n", typingBackendName())
 	if s.running() && s.Warning != "" {
 		fmt.Println("Action:    ", s.Warning)
 	}
