@@ -64,7 +64,7 @@ func loadConfig() (config, error) {
 	var cfg config
 	data, err := os.ReadFile(configPath())
 	if errors.Is(err, os.ErrNotExist) {
-		return cfg, errors.New("not paired yet; run the install command from the web app (Settings → Computers)")
+		return cfg, errors.New("not paired yet; run the install command from the web app (Settings → Clients)")
 	}
 	if err == nil {
 		err = json.Unmarshal(data, &cfg)

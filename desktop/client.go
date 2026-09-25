@@ -87,7 +87,7 @@ func connect(ctx context.Context, server, token, client string) (*websocket.Conn
 func enroll(ctx context.Context, server, token, name string) (config, error) {
 	conn, ready, err := connect(ctx, server, token, name)
 	if websocket.CloseStatus(err) == closeBadCredential {
-		return config{}, errors.New("the install command was replaced; copy a fresh one from Settings → Computers")
+		return config{}, errors.New("the install command was replaced; copy a fresh one from Settings → Clients")
 	}
 	if err != nil {
 		return config{}, fmt.Errorf("could not reach %s: %w", server, err)
@@ -117,7 +117,7 @@ func serve(ctx context.Context, cfg config) error {
 		}
 		reason := err.Error()
 		if websocket.CloseStatus(err) == closeBadCredential {
-			reason = "the server rejected this computer; run the install command again"
+			reason = "the server rejected this client (removed?); run the install command again"
 			delay = time.Minute
 		}
 		log.Printf("disconnected: %s; retrying in %s", reason, delay)
@@ -267,9 +267,9 @@ func watchPermission(ctx context.Context) {
 
 func selectedText(selected bool) string {
 	if selected {
-		return "this computer types dictation"
+		return "this is the active client; it types dictation"
 	}
-	return "another computer is selected to type; pick this one in the web app"
+	return "another client is active; pick this one in Settings → Clients to type here"
 }
 
 func readJSON(ctx context.Context, conn *websocket.Conn, v any) error {

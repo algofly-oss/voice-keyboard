@@ -74,7 +74,7 @@ func main() {
 func enrollCommand(args []string) error {
 	flags := flag.NewFlagSet("enroll", flag.ContinueOnError)
 	server := flags.String("server", "", "backend URL, e.g. https://voice.example.com")
-	token := flags.String("token", "", "install token from Settings → Computers")
+	token := flags.String("token", "", "install token from Settings → Clients")
 	name := flags.String("name", "", "name shown in the web app (default: host name)")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -133,19 +133,19 @@ func stopCommand() error {
 func statusCommand() error {
 	cfg, err := loadConfig()
 	if err != nil {
-		fmt.Println("Not paired. Run the install command from the web app: Settings → Computers.")
+		fmt.Println("Not paired. Run the install command from the web app: Settings → Clients.")
 		return nil
 	}
 	s := readState()
-	fmt.Printf("Computer:   %s\nServer:     %s\n", cfg.Client, cfg.Server)
+	fmt.Printf("Client:     %s\nServer:     %s\n", cfg.Client, cfg.Server)
 	switch {
 	case !s.running():
 		fmt.Println("Running:    no (start it with: voice-keyboard start)")
 	case s.Connected:
 		fmt.Printf("Running:    yes, connected since %s\n", s.Since.Local().Format("Jan 2 15:04"))
 		if s.Selected != nil {
-			fmt.Printf("Typing:     %s\n", map[bool]string{true: "yes, this computer types dictation",
-				false: "no, another computer is selected (Settings → Computers in the web app)"}[*s.Selected])
+			fmt.Printf("Typing:     %s\n", map[bool]string{true: "yes, this is the active client",
+				false: "no, another client is active (Settings → Clients in the web app)"}[*s.Selected])
 		}
 	default:
 		fmt.Printf("Running:    yes, not connected (%s)\n", s.LastError)

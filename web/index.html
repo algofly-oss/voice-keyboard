@@ -341,7 +341,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
     <div class="tabs" role="tablist" aria-label="Settings sections">
       <span class="tab-pill" id="tabPill"></span>
       <button role="tab" id="tab-general" aria-controls="pane-general" aria-selected="true"><i data-i="sliders"></i>General</button>
-      <button role="tab" id="tab-device" aria-controls="pane-device" aria-selected="false" tabindex="-1"><i data-i="cpu"></i>Computers</button>
+      <button role="tab" id="tab-device" aria-controls="pane-device" aria-selected="false" tabindex="-1"><i data-i="cpu"></i>Clients</button>
       <button role="tab" id="tab-account" aria-controls="pane-account" aria-selected="false" tabindex="-1"><i data-i="user"></i>Account</button>
     </div>
     <form class="sheet-body" id="form" novalidate autocomplete="off">
@@ -378,22 +378,22 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
       <section class="pane" id="pane-device" role="tabpanel" aria-labelledby="tab-device" hidden>
         <div id="desktopClient">
           <div class="group">
-            <div class="group-head"><h3>Your computers</h3><span class="count" id="clientCount">0</span></div>
-            <p class="hint">Tap the computer that should type your dictation. Only one types at a time.</p>
+            <div class="group-head"><h3>Your clients</h3><span class="count" id="clientCount">0</span></div>
+            <p class="hint">Tap the client that should type your dictation. Only one is active at a time.</p>
             <ul class="device-list" id="deviceList" aria-live="polite"></ul>
           </div>
           <div class="group">
-            <div class="group-head"><h3>Add a computer</h3></div>
+            <div class="group-head"><h3>Add a client</h3></div>
             <ol class="steps">
               <li><span class="step-title">Choose its operating system</span>
-                <div class="os-tabs" role="tablist" aria-label="Computer operating system">
+                <div class="os-tabs" role="tablist" aria-label="Operating system">
                   <button type="button" role="tab" data-install-os="unix" aria-selected="true">macOS / Linux</button>
                   <button type="button" role="tab" data-install-os="windows" aria-selected="false">Windows</button>
                 </div></li>
               <li><span class="step-title" id="runHint">Paste this in Terminal</span>
                 <div class="code-box"><code id="installCommand" aria-labelledby="runHint">Generating…</code>
                   <button type="button" class="copy-btn" id="copyCommand" aria-label="Copy install command" disabled><i data-i="copy"></i><span>Copy</span></button></div>
-                <div class="code-meta"><span class="hint">Reusable on any number of computers</span><button type="button" class="link-btn" id="generateInstall">New command</button></div></li>
+                <div class="code-meta"><span class="hint">Reusable on any number of clients</span><button type="button" class="link-btn" id="generateInstall">New command</button></div></li>
               <li><span class="step-title">That's it</span>
                 <p class="hint">It runs in the background, starts at every login, and types into the focused window. On macOS, allow it under Privacy &amp; Security → Accessibility when asked. Manage it with <code>voice-keyboard status</code>, <code>stop</code> and <code>start</code>.</p></li>
             </ol>
@@ -488,8 +488,8 @@ async function pollDevice(){
   try{deviceStatus=await (await fetch('/api/status',{cache:'no-store'})).json()}catch{return}
   if(!deviceStatus.devices)return;
   const sel=deviceStatus.selected;
-  setChip($('#desktopChip'),sel?.online?'ok':sel?'wait':'bad',sel?sel.name:'No computer',
-    sel?`Typing on ${sel.name} (${sel.online?'online':'offline'})`:'No computer selected. Add one in Settings → Computers');
+  setChip($('#desktopChip'),sel?.online?'ok':sel?'wait':'bad',sel?sel.name:'No client',
+    sel?`Typing on ${sel.name} (${sel.online?'online':'offline'})`:'No client selected. Add one in Settings → Clients');
   renderDevices(deviceStatus.devices);lockKeys(!sel?.online);
 }
 async function checkServer(url){
@@ -643,7 +643,7 @@ function typeLive(text){if(text)typedAny=true}  // the gateway delivers text to 
 async function typeOnDevice(text){
   pressAfterKey();
   const sel=deviceStatus.selected;
-  say(sel?.online?`Typed on ${sel.name}`:'Transcribed, but no computer is online to type it');
+  say(sel?.online?`Typed on ${sel.name}`:'Transcribed, but the active client is offline');
 }
 function watchTyping(){const tick=async()=>{await pollDevice();if(deviceStatus.typing)setTimeout(tick,400);else if(state==='idle')say('Done. Tap the microphone to dictate again')};setTimeout(tick,400)}
 
@@ -800,7 +800,7 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
   document.querySelectorAll('[data-install-os]').forEach(tab=>tab.addEventListener('click',()=>{installOs=tab.dataset.installOs;renderInstall()}));
   // The command stays valid until replaced; replacing it only affects new installs.
   async function loadInstallCommand(replace){
-    if(replace&&!confirm('Create a new install command? The current one will stop working for new installs. Computers already connected are not affected.'))return;
+    if(replace&&!confirm('Create a new install command? The current one will stop working for new installs. Clients already connected are not affected.'))return;
     const button=$('#generateInstall');button.disabled=true;install=null;renderInstall();
     try{
       const response=await fetch('/api/enroll',{method:replace?'POST':'GET'});
@@ -811,25 +811,25 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
   }
   window.renderDevices=devices=>{
     const list=$('#deviceList');
-    if(!devices.length){list.replaceChildren(Object.assign(document.createElement('li'),{className:'empty',textContent:'No computer yet. Install one below.'}));}
+    if(!devices.length){list.replaceChildren(Object.assign(document.createElement('li'),{className:'empty',textContent:'No client yet. Install one below.'}));}
     else list.replaceChildren(...devices.map(d=>{
       const li=document.createElement('li');li.className='device';
       const seen=d.online?'Online':d.lastSeen?'Last seen '+new Date(d.lastSeen*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'Never connected';
       li.innerHTML=`<button type="button" class="device-pick" aria-pressed="${d.selected}"><span class="device-dot${d.online?' on':''}"></span>`+
-        `<span class="text"><span class="title"></span><span class="hint"></span></span>${d.selected?'<span class="device-tag">Types</span>':''}</button>`+
+        `<span class="text"><span class="title"></span><span class="hint"></span></span>${d.selected?'<span class="device-tag">Active</span>':''}</button>`+
         `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename">${svg('edit')}</button>`+
         `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;
       li.querySelector('.title').textContent=d.name;
       li.querySelector('.hint').textContent=[d.platform,d.version&&'v'+d.version,seen].filter(Boolean).join(' · ');
       li.querySelector('.device-pick').onclick=()=>deviceAction('POST',`/api/devices/${d.id}/select`);
-      li.querySelector('[data-act=rename]').onclick=()=>{const name=prompt('Name for this computer',d.name);if(name&&name.trim()&&name!==d.name)deviceAction('PATCH',`/api/devices/${d.id}`,{name:name.trim()})};
+      li.querySelector('[data-act=rename]').onclick=()=>{const name=prompt('Name for this client',d.name);if(name&&name.trim()&&name!==d.name)deviceAction('PATCH',`/api/devices/${d.id}`,{name:name.trim()})};
       li.querySelector('[data-act=remove]').onclick=()=>{if(confirm(`Remove ${d.name}? It stops typing and must be installed again to come back.`))deviceAction('DELETE',`/api/devices/${d.id}`)};
       return li}));
     $('#clientCount').textContent=devices.length;$('#clientCount').classList.toggle('on',devices.some(d=>d.online));
   };
   async function deviceAction(method,url,body){
     const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
-    if(!r.ok)toast((await r.json().catch(()=>({}))).detail||'Could not update the computer',{error:true});
+    if(!r.ok)toast((await r.json().catch(()=>({}))).detail||'Could not update the client',{error:true});
     pollDevice();
   }
   $('#changePassword').addEventListener('click',async()=>{

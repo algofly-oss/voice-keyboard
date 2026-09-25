@@ -30,8 +30,8 @@ and reconnects on its own.
 
 ## 3. Install the desktop client
 
-In the web UI open **Settings → Computers**, pick the operating system, and run
-the command it shows on that computer:
+In the web UI open **Settings → Clients**, pick the operating system, and run
+the command it shows on the computer you want to type on:
 
 ```bash
 # macOS / Linux
@@ -43,9 +43,9 @@ curl -fsSL https://your-host/client/install.sh | sh -s -- --server https://your-
 ```
 
 It installs one self-contained program (x86-64 or ARM64) that runs in the
-background, starts after every restart, and reconnects on its own. Your
-computers are listed under **Settings → Computers**. Tap the one that should
-type; only that one receives your dictation.
+background, starts after every restart, and reconnects on its own. Every
+installed client is listed under **Settings → Clients** with its status. Tap
+the one that should type; only that active client receives your dictation.
 
 ```bash
 voice-keyboard status   # connected? selected to type?  Also: logs, stop, start, uninstall
@@ -59,12 +59,12 @@ Details are in [desktop/README.md](desktop/README.md).
 The first account (`admin`) is created from `WEB_PASSWORD`, and its password
 can be changed later under **Settings → Account**. Set `ALLOW_SIGNUPS=true` to
 let others create accounts on the login page; it is off by default. Each account
-has its own computers, install command, and dictation. All accounts share the
+has its own clients, install command, and dictation. All accounts share the
 one Whisper model: if two people dictate at the same moment, their requests
 wait their turn (`WHISPER_CONCURRENCY`, default 1).
 
 ## Security
 
 Use HTTPS outside your LAN and a long random `SESSION_SECRET`. If an install
-command leaks, click **New command** in Settings → Computers. Remove a lost
-computer from the same list to revoke it.
+command leaks, click **New command** in Settings → Clients. Remove a lost
+client from the same list to revoke it.

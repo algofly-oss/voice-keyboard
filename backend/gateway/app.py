@@ -423,7 +423,7 @@ async def backend_status(request: Request):
 async def select_device(device_id: int, request: Request):
     user = require_user(request)
     if not store.device(user["id"], device_id):
-        raise HTTPException(404, "No such computer")
+        raise HTTPException(404, "No such client")
     store.select_device(user["id"], device_id)
     await announce_selection(room_for(store.user(user["id"])))
     return {"ok": True}
@@ -434,7 +434,7 @@ async def rename_device(device_id: int, request: Request):
     user = require_user(request)
     name = str((await request.json()).get("name") or "").strip()[:80]
     if not name or not store.device(user["id"], device_id):
-        raise HTTPException(400, "Invalid name or computer")
+        raise HTTPException(400, "Invalid name or client")
     store.update_device(device_id, name=name)
     room_for(user).broadcast({"type": "devices"})
     return {"ok": True}
@@ -445,11 +445,11 @@ async def remove_device(device_id: int, request: Request):
     """Revokes the computer's credential; it has to be installed again."""
     user = require_user(request)
     if not store.delete_device(user["id"], device_id):
-        raise HTTPException(404, "No such computer")
+        raise HTTPException(404, "No such client")
     room = room_for(store.user(user["id"]))
     if (client := room.devices.pop(device_id, None)) is not None:
         try:
-            await client.close(code=4401, reason="This computer was removed")
+            await client.close(code=4401, reason="This client was removed")
         except Exception:
             pass
     await announce_selection(room)
@@ -625,7 +625,7 @@ async def keyboard(ws: WebSocket):
             # Installed before accounts existed: it belongs to the admin, keyed by its old client id.
             admin = store.admin()
             if not admin:
-                await ws.close(code=4401, reason="No account to attach this computer to")
+                await ws.close(code=4401, reason="No account to attach this client to")
                 return
             legacy_id = client_id_from_credential(token) if valid_client_credential(token) else name
             device = (store.device_by_machine(admin["id"], f"legacy:{legacy_id}")

@@ -13,7 +13,7 @@ packages, or administrator rights.
 
 ## Install
 
-Copy the command from the web app: **Settings → Computers**. It downloads the
+Copy the command from the web app: **Settings → Clients**. It downloads the
 binary for this OS and CPU, pairs it, and starts it in the background:
 
 ```bash
@@ -42,9 +42,9 @@ login until you run `stop`. It never gives up on the server: every failure
 (network change, server restart, a display that isn't ready yet at login) is
 retried with back-off.
 
-Each computer appears in the web UI under **Settings → Computers** with its
-name, OS/CPU, and version. Only the selected one types, and `status` shows
-whether this computer is it. Logs roll over at 1 MB and keep three files
+Each client appears in the web UI under **Settings → Clients** with its
+name, OS/CPU, and version. Only the active one types, and `status` shows
+whether this client is it. Logs roll over at 1 MB and keep three files
 (`voice-keyboard.log`, `.1`, `.2`) in the config directory shown by `status`.
 
 **Platform notes**
