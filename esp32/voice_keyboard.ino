@@ -11,8 +11,8 @@
 #include "firmware_config.h"
 #include "web_app.h"
 
-// Defaults used until they are changed from the web settings page.
-// Router credentials shared with the other projects in this repository.
+// Defaults used until they are changed from the web settings page. Real values
+// come from the ignored firmware_config.h (generated from esp32/.env).
 #ifndef VK_DEFAULT_WIFI_NAME
 #define VK_DEFAULT_WIFI_NAME ""
 #endif
@@ -25,6 +25,9 @@
 #ifndef VK_DEFAULT_API_KEY
 #define VK_DEFAULT_API_KEY "change-me"
 #endif
+#ifndef VK_DEFAULT_WEB_PASSWORD
+#define VK_DEFAULT_WEB_PASSWORD "change-me"
+#endif
 
 constexpr char DEFAULT_WIFI_NAME[] = VK_DEFAULT_WIFI_NAME;
 constexpr char DEFAULT_WIFI_PASSWORD[] = VK_DEFAULT_WIFI_PASSWORD;
@@ -35,7 +38,7 @@ constexpr char DEFAULT_WHISPER_MODEL[] = "deepdml/faster-whisper-large-v3-turbo-
 // Must match API_KEY in backend/.env.
 constexpr char DEFAULT_API_KEY[] = VK_DEFAULT_API_KEY;
 // Password for the web app; any string, changeable in Settings > Device.
-constexpr char DEFAULT_WEB_PASSWORD[] = "change-me";
+constexpr char DEFAULT_WEB_PASSWORD[] = VK_DEFAULT_WEB_PASSWORD;
 constexpr char SETUP_AP_NAME[] = "VoiceKeyboard-Setup";
 constexpr char SETUP_AP_PASSWORD[] = "voicekeyboard";
 

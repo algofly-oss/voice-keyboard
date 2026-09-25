@@ -63,10 +63,10 @@ address and mDNS address, normally `http://voice-keyboard.local/`. If Wi-Fi is
 not configured it starts the `VoiceKeyboard-Setup` access point with password
 `voicekeyboard`; open `http://192.168.4.1/` to configure it.
 
-Pair the advertised **ESP32 Voice Keyboard** device with the target computer,
-iPhone, or iPad. Open the web UI on a phone, configure the backend server, and
-tap the microphone. The ESP32 receives the recognized text and types it into
-the active application.
+Pair the advertised **ESP32 Voice Keyboard** with the target device (anything
+that accepts a Bluetooth keyboard). Open the ESP32's web UI in a browser,
+configure the backend server, and tap the microphone. The ESP32 receives the
+recognized text and types it into the active application.
 
 ## Command-line build alternative
 

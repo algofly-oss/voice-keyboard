@@ -5,3 +5,4 @@
 #define VK_DEFAULT_WIFI_PASSWORD ""
 #define VK_DEFAULT_SERVER_URL ""
 #define VK_DEFAULT_API_KEY "change-me"
+#define VK_DEFAULT_WEB_PASSWORD "change-me"

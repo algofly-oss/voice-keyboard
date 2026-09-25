@@ -17,5 +17,6 @@ out.write_text(
     f'#define VK_DEFAULT_WIFI_PASSWORD "{value("VK_DEFAULT_WIFI_PASSWORD")}"\n'
     f'#define VK_DEFAULT_SERVER_URL "{value("VK_DEFAULT_SERVER_URL")}"\n'
     f'#define VK_DEFAULT_API_KEY "{value("VK_DEFAULT_API_KEY", "change-me")}"\n'
+    f'#define VK_DEFAULT_WEB_PASSWORD "{value("VK_DEFAULT_WEB_PASSWORD", "change-me")}"\n'
 )
 print(f"Generated {out}")

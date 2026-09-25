@@ -287,12 +287,11 @@ async def web_ui():
     return HTMLResponse(page)
 
 
-# Release asset -> (directory under RELEASES_DIR, media type).
-RELEASE_FILES = {"VoiceKeyboard.apk": ("android", "application/vnd.android.package-archive")}
 # Desktop client: one self-contained binary per OS/CPU, fetched by /client/install.*
 DESKTOP_BINARIES = [f"voice-keyboard-{os_}-{arch}{'.exe' if os_ == 'windows' else ''}"
                     for os_ in ("linux", "darwin", "windows") for arch in ("amd64", "arm64")]
-RELEASE_FILES.update({name: ("desktop", "application/octet-stream") for name in DESKTOP_BINARIES})
+# Release asset -> (directory under RELEASES_DIR, media type).
+RELEASE_FILES = {name: ("desktop", "application/octet-stream") for name in DESKTOP_BINARIES}
 
 
 def release_path(filename: str) -> Path | None:
@@ -300,12 +299,12 @@ def release_path(filename: str) -> Path | None:
     return path if path.is_file() else None
 
 
-# Client builds are published as GitHub releases tagged voice-keyboard-v*. The
-# gateway mirrors the newest one into RELEASES_DIR so /downloads can serve it
-# (release assets of a private repository need a token phones do not have).
+# Client builds are published as GitHub releases tagged v<version>. The
+# gateway mirrors the newest one into RELEASES_DIR so /client can serve it
+# (release assets of a private repository need a token the installers do not have).
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-RELEASE_TAG_PREFIX = "voice-keyboard-v"
+RELEASE_TAG_PREFIX = "v"
 RELEASE_SYNC_SECONDS = int(os.environ.get("RELEASE_SYNC_SECONDS", "3600"))
 
 
@@ -342,7 +341,7 @@ async def sync_releases() -> str | None:
                 with partial.open("wb") as out:
                     async for chunk in download.aiter_bytes():
                         out.write(chunk)
-            partial.replace(target)  # atomic, so /downloads never serves half a file
+            partial.replace(target)  # atomic, so /client never serves half a file
             state[filename] = version
             state["tag"] = release["tag_name"]
             state_file.write_text(json.dumps(state) + "\n")
@@ -360,47 +359,6 @@ async def sync_releases_forever():
         except Exception as e:  # GitHub unreachable or token missing; keep serving what we have.
             log.warning("Release sync failed: %s", e)
         await asyncio.sleep(RELEASE_SYNC_SECONDS)
-
-
-@app.get("/downloads", include_in_schema=False)
-async def downloads(request: Request):
-    """Install page for the Android keyboard."""
-    logged_in = authenticated_request(request)
-    android = ('<a class="button" href="/downloads/android/VoiceKeyboard.apk">Download APK</a>'
-               '<p class="muted">Allow the one-time “install unknown apps” prompt when asked.</p>'
-               if release_path("VoiceKeyboard.apk") else '<p class="muted">No Android build published yet.</p>')
-    if logged_in:
-        # The installed app registers the voicekeyboard:// scheme and exchanges the
-        # install token at /api/pair, so pairing is a single tap on the phone.
-        pairing = """<p>Open the app once, then tap below to pair this phone with the server.</p>
-<button class="button" id="pair">Pair this phone</button><p class="muted" id="pairStatus"></p>
-<script>document.getElementById('pair').onclick=async()=>{const s=document.getElementById('pairStatus');
-const r=await fetch('/api/enroll');if(!r.ok){s.textContent='Could not create a pairing code.';return}
-const t=await r.json();location.href='voicekeyboard://pair?server='+encodeURIComponent(location.origin)+'&token='+encodeURIComponent(t.token);
-s.textContent='If nothing opened, install the app first.'}</script>"""
-    else:
-        pairing = '<p>After installing, <a href="/">log in to the web app</a> on this phone and return here to pair it in one tap.</p>'
-    return HTMLResponse("""<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Voice Keyboard downloads</title><style>
-body{font:16px system-ui,sans-serif;max-width:42rem;margin:2.5rem auto;padding:0 1rem;color:#f2f3f5;background:#1e1f22}
-h2{font-size:1.1rem;margin:2rem 0 .5rem}
-a.button,button.button{display:block;width:100%;box-sizing:border-box;text-align:center;font:inherit;font-weight:600;border:0;cursor:pointer;background:#5865f2;color:white;text-decoration:none;padding:.9rem;border-radius:.7rem;margin:.6rem 0}
-a.button.secondary{background:#383a40}
-.muted{color:#b5bac1;font-size:.9rem;margin:.4rem 0}
-a{color:#8ea1ff}
-</style><h1>Voice Keyboard</h1><p>Install the keyboard on this phone, then pair it with your server.</p>
-<h2>Android</h2>""" + android + "<h2>Pair</h2>" + pairing +
-                        """<p><a href="/">Back to web app</a></p></html>""")
-
-
-@app.get("/downloads/{platform}/{filename}", include_in_schema=False)
-async def release_file(platform: str, filename: str):
-    if RELEASE_FILES.get(filename, ("",))[0] != platform:
-        raise HTTPException(404, "Release not found")
-    path = release_path(filename)
-    if not path:
-        raise HTTPException(404, "No release published")
-    return FileResponse(path, media_type=RELEASE_FILES[filename][1], filename=filename)
 
 
 @app.get("/api/status")
@@ -442,7 +400,7 @@ async def enroll(request: Request):
     """GET returns the current install command; POST replaces its token.
 
     The token does not expire. It keeps working for new installs until the user
-    generates a new one; computers and phones already paired keep their own
+    generates a new one; computers already paired keep their own
     credentials and stay connected.
     """
     if not authenticated_request(request):
@@ -452,21 +410,6 @@ async def enroll(request: Request):
     return {"token": token,
             "shell": f"curl -fsSL {base}/client/install.sh | sh -s -- --server {base} --token {token}",
             "powershell": f"& ([scriptblock]::Create((irm '{base}/client/install.ps1'))) -Server '{base}' -Token '{token}'"}
-
-
-@app.post("/api/pair")
-async def pair(request: Request):
-    """Exchange a one-time enrollment token for a mobile keyboard credential."""
-    try:
-        body = await request.json()
-    except ValueError:
-        raise HTTPException(400, "Expected JSON")
-    token = str(body.get("token") or "")
-    if not valid_enrollment(token):
-        raise HTTPException(401, "Pairing code was replaced by a newer one")
-    client_id = str(body.get("client") or f"mobile-{secrets.token_hex(4)}")[:120]
-    return {"client": client_id, "credential": issue_client_credential(client_id),
-            "server": public_base_url(request)}
 
 
 @app.post("/api/login")
@@ -685,8 +628,7 @@ async def events(ws: WebSocket):
     client -> {"type":"stop"} or {"type":"cancel"}  to end another device's dictation
     """
     await ws.accept()  # Accept first so the browser sees the 4401 close code.
-    token = request_token(ws)
-    if not authorized(token) and not valid_client_credential(token):
+    if not authorized(request_token(ws)):
         await ws.close(code=4401, reason="Invalid API key")
         return
     room = rooms[ws.query_params.get("room") or "default"]
@@ -718,8 +660,7 @@ async def stream(ws: WebSocket):
     server -> {"type":"error","message":"..."}
     """
     await ws.accept()  # Accept first so the browser sees the 4401 close code.
-    token = request_token(ws)
-    if not authorized(token) and not valid_client_credential(token):
+    if not authorized(request_token(ws)):
         await ws.close(code=4401, reason="Invalid API key")
         return
     try:
