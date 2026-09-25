@@ -224,6 +224,16 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .device-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .device-list li.empty{color:var(--subtle);font-size:14px}
 .device{display:flex;align-items:center;gap:6px}
+.device-pick{cursor:pointer}
+.device-pick .device-name{height:30px;padding:0 8px;font-size:15px;font-weight:600;border-color:var(--accent);background:var(--bg)}
+.ask{border:0;padding:0;background:none;color:var(--text);width:min(360px,calc(100vw - 32px))}
+.ask::backdrop{background:rgba(0,0,0,.55)}
+.ask-box{display:flex;flex-direction:column;gap:10px;padding:20px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border-soft);box-shadow:var(--shadow)}
+.ask h2{margin:0;font-size:17px;font-weight:650}
+.ask p{margin:0;color:var(--muted);font-size:14px;line-height:1.45}
+.ask-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.ask-actions .btn{width:auto;height:40px;padding:0 16px;font-size:14px}
+.btn.danger{background:var(--danger);color:#fff}
 .device-pick{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--input);color:var(--text);text-align:left}
 .device-pick[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .device-pick .text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -335,6 +345,14 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 </div>
 
 <div class="toast" id="toast" role="alert" aria-live="assertive"><i data-i="check"></i><span class="msg"></span></div>
+
+<dialog class="ask" id="ask" aria-labelledby="askTitle" aria-describedby="askText">
+  <form method="dialog" class="ask-box">
+    <h2 id="askTitle"></h2>
+    <p id="askText"></p>
+    <div class="ask-actions"><button value="cancel" class="btn secondary" id="askCancel">Cancel</button><button value="ok" class="btn primary" id="askOk">Confirm</button></div>
+  </form>
+</dialog>
 
 <dialog class="sheet" id="sheet" aria-labelledby="sheetTitle">
   <div class="scrim" data-close></div>
@@ -742,6 +760,15 @@ $('#enter').addEventListener('click',()=>sendKey('k=enter'));
 // Disconnecting brings back the device's on-screen keyboard; dictating reconnects.
 function lockKeys(locked){$('.keys').classList.toggle('locked',locked);document.querySelectorAll('.keys button').forEach(b=>b.disabled=locked)}
 
+// In-app confirmation dialog (instead of the browser's confirm()).
+function ask(title,text,{ok='Confirm',danger=false}={}){
+  const d=$('#ask'),button=$('#askOk');
+  $('#askTitle').textContent=title;$('#askText').textContent=text;
+  button.textContent=ok;button.className='btn '+(danger?'danger':'primary');
+  d.returnValue='';d.showModal();(danger?$('#askCancel'):button).focus();
+  return new Promise(resolve=>d.addEventListener('close',()=>resolve(d.returnValue==='ok'),{once:true}));
+}
+
 // ---------- Settings sheet ----------
 const sheet=$('#sheet'),form=$('#form'),saveBtn=$('#save'),tabs=[...document.querySelectorAll('.tabs [role=tab]')];
 function selectTab(name,focus){tabs.forEach((t,i)=>{const on=t.id==='tab-'+name;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1;
@@ -805,7 +832,7 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
   document.querySelectorAll('[data-install-os]').forEach(tab=>tab.addEventListener('click',()=>{installOs=tab.dataset.installOs;renderInstall()}));
   // The command stays valid until replaced; replacing it only affects new installs.
   async function loadInstallCommand(replace){
-    if(replace&&!confirm('Create a new install command? The current one will stop working for new installs. Clients already connected are not affected.'))return;
+    if(replace&&!await ask('Create a new install command?','The current command stops working for new installs. Clients already installed stay connected.',{ok:'Create new command'}))return;
     const button=$('#generateInstall');button.disabled=true;install=null;renderInstall();
     try{
       const response=await fetch('/api/enroll',{method:replace?'POST':'GET'});
@@ -814,24 +841,45 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     }catch(error){$('#installCommand').textContent='Could not load the install command.';toast(error.message,{error:true})}
     finally{button.disabled=false;renderInstall()}
   }
+  let renaming=null;  // id of the client whose name is being edited; pauses re-rendering
   window.renderDevices=devices=>{
+    if(renaming!==null)return;
     const list=$('#deviceList');
     if(!devices.length){list.replaceChildren(Object.assign(document.createElement('li'),{className:'empty',textContent:'No client yet. Install one below.'}));}
     else list.replaceChildren(...devices.map(d=>{
       const li=document.createElement('li');li.className='device';
       const seen=d.online?'Online':d.lastSeen?'Last seen '+new Date(d.lastSeen*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'Never connected';
-      li.innerHTML=`<button type="button" class="device-pick" aria-pressed="${d.selected}"><span class="device-dot${d.online?' on':''}"></span>`+
-        `<span class="text"><span class="title"></span><span class="hint"></span></span>${d.selected?'<span class="device-tag">Active</span>':''}</button>`+
+      li.innerHTML=`<div class="device-pick" role="button" tabindex="0" aria-pressed="${d.selected}" aria-label="Make this the active client"><span class="device-dot${d.online?' on':''}"></span>`+
+        `<span class="text"><span class="title"></span><span class="hint"></span></span>${d.selected?'<span class="device-tag">Active</span>':''}</div>`+
         `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename">${svg('edit')}</button>`+
         `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;
       li.querySelector('.title').textContent=d.name;
       li.querySelector('.hint').textContent=[d.platform,d.version&&'v'+d.version,seen].filter(Boolean).join(' · ');
-      li.querySelector('.device-pick').onclick=()=>deviceAction('POST',`/api/devices/${d.id}/select`);
-      li.querySelector('[data-act=rename]').onclick=()=>{const name=prompt('Name for this client',d.name);if(name&&name.trim()&&name!==d.name)deviceAction('PATCH',`/api/devices/${d.id}`,{name:name.trim()})};
-      li.querySelector('[data-act=remove]').onclick=()=>{if(confirm(`Remove ${d.name}? It stops typing and must be installed again to come back.`))deviceAction('DELETE',`/api/devices/${d.id}`)};
+      const pick=li.querySelector('.device-pick'),select=()=>{if(renaming===null&&!d.selected)deviceAction('POST',`/api/devices/${d.id}/select`)};
+      pick.onclick=select;
+      pick.onkeydown=e=>{if(e.target===pick&&(e.key==='Enter'||e.key===' ')){e.preventDefault();select()}};
+      li.querySelector('[data-act=rename]').onclick=()=>renameInline(li,d);
+      li.querySelector('[data-act=remove]').onclick=async()=>{
+        if(await ask(`Remove ${d.name}?`,'It stops typing and has to be installed again to come back.',{ok:'Remove',danger:true}))deviceAction('DELETE',`/api/devices/${d.id}`)};
       return li}));
     $('#clientCount').textContent=devices.length;$('#clientCount').classList.toggle('on',devices.some(d=>d.online));
   };
+  // Turns the client's name into a text field in place: Enter or leaving it saves, Esc cancels.
+  function renameInline(li,d){
+    if(renaming!==null)return;
+    renaming=d.id;
+    const title=li.querySelector('.title'),input=document.createElement('input');
+    Object.assign(input,{type:'text',value:d.name,maxLength:80,className:'device-name'});
+    input.setAttribute('aria-label','Client name');
+    title.replaceWith(input);input.focus();input.select();
+    let done=false;
+    const finish=save=>{if(done)return;done=true;renaming=null;
+      const name=input.value.trim();
+      if(save&&name&&name!==d.name)deviceAction('PATCH',`/api/devices/${d.id}`,{name});else pollDevice()};
+    input.onclick=e=>e.stopPropagation();
+    input.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(true)}else if(e.key==='Escape'){e.preventDefault();finish(false)}};
+    input.onblur=()=>finish(true);
+  }
   async function deviceAction(method,url,body){
     const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
     if(!r.ok)toast((await r.json().catch(()=>({}))).detail||'Could not update the client',{error:true});
