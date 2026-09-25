@@ -1,0 +1,7 @@
+#pragma once
+
+// Generated from esp32/.env by tools/generate_firmware_config.py.
+#define VK_DEFAULT_WIFI_NAME ""
+#define VK_DEFAULT_WIFI_PASSWORD ""
+#define VK_DEFAULT_SERVER_URL ""
+#define VK_DEFAULT_API_KEY "change-me"

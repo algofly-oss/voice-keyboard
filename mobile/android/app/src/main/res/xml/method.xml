@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="ai.algofly.voicekeyboard.MainActivity"
+    android:supportsSwitchingToNextInputMethod="true">
+    <subtype
+        android:imeSubtypeMode="voice"
+        android:imeSubtypeLocale=""
+        android:label="@string/app_name"
+        android:isAsciiCapable="true" />
+</input-method>

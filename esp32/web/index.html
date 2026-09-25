@@ -47,6 +47,7 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .chips{display:flex;gap:2px}
 .chips{align-items:center}
 .chip{position:relative;width:32px;height:36px;color:var(--subtle);display:grid;place-items:center;transition:color .2s}
+.chip[hidden]{display:none}
 .chip svg.i{width:19px;height:19px}
 .chip[data-state=ok]{color:var(--muted)}  /* same gray as the settings icon */
 .chip[data-state=bad],.chip[data-state=off]{color:var(--danger)}
@@ -191,9 +192,48 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .switch input:focus-visible~.track{outline:2px solid var(--accent);outline-offset:2px}
 .callout{display:flex;gap:10px;padding:12px;border-radius:var(--radius);background:rgba(240,178,50,.1);color:#f5d08a;font-size:14px}
 .callout svg.i{width:18px;height:18px;margin-top:1px}
-.test-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.test-result{font-size:14px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
-.test-result.ok{color:#5fd08f}.test-result.bad{color:#ff8a8d}
+#desktopClient:not([hidden]){display:flex;flex-direction:column;gap:14px}
+.group{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft)}
+.group-head{display:flex;align-items:center;gap:8px}
+.group-head h3{flex:1;margin:0;font-size:15px;font-weight:650}
+.count{min-width:24px;height:22px;padding:0 7px;border-radius:999px;background:var(--elevated);color:var(--muted);font-size:12px;font-weight:700;display:grid;place-items:center}
+.count.on{background:var(--success-soft);color:#5fd08f}
+.client-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.client-list li{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text);overflow-wrap:anywhere}
+.client-list li::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
+.client-list li.empty{color:var(--subtle)}.client-list li.empty::before{background:var(--subtle);box-shadow:none}
+.steps{list-style:none;margin:0;padding:0;counter-reset:step;display:flex;flex-direction:column;gap:16px}
+.steps li{position:relative;padding-left:34px;display:flex;flex-direction:column;gap:8px;counter-increment:step}
+.steps li::before{content:counter(step);position:absolute;left:0;top:-1px;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:#a5adff;font-size:12px;font-weight:700;display:grid;place-items:center}
+.step-title{font-size:14px;font-weight:600;color:var(--text)}
+.os-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:var(--radius-sm);background:var(--bg)}
+.os-tabs button{height:34px;border:0;border-radius:6px;background:none;color:var(--muted);font-size:14px;font-weight:600;transition:background .2s,color .2s}
+.os-tabs button[aria-selected=true]{background:var(--elevated);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.os-tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.code-box{display:flex;align-items:stretch;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--input);overflow:hidden}
+.code-box code{flex:1;min-width:0;padding:10px 12px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#dbdee1;word-break:break-all;max-height:7.5em;overflow:auto;user-select:all}
+.copy-btn{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:64px;border:0;border-left:1px solid var(--border);background:var(--elevated);color:var(--text);font-size:12px;font-weight:600}
+.copy-btn svg.i{width:18px;height:18px}
+.copy-btn:disabled{color:var(--subtle)}
+.copy-btn.done{color:#5fd08f}
+.code-meta{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.steps .hint code{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:1px 5px;border-radius:4px;background:var(--elevated);color:var(--muted)}
+.link-btn{border:0;background:none;padding:6px 0;color:#a5adff;font-size:14px;font-weight:600}
+.link-btn:disabled{color:var(--subtle)}
+.link-btn.danger{align-self:center;color:#ff8a8d}
+.row-link{display:flex;align-items:center;gap:12px;padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft);color:var(--text);text-decoration:none}
+.row-link .text{flex:1;display:flex;flex-direction:column;gap:2px}.row-link .title{font-size:15px;font-weight:600}
+.row-link>svg.i{width:20px;height:20px;color:var(--muted)}
+.conn{display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft);transition:border-color .2s}
+.conn .text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.conn .title{font-size:15px;font-weight:600;color:var(--text)}
+.conn-dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--subtle)}
+.conn[data-state=checking] .conn-dot{background:var(--warning);animation:blink 1.2s infinite}
+.conn[data-state=ok]{border-color:rgba(35,165,90,.35)}.conn[data-state=ok] .conn-dot{background:var(--success);box-shadow:0 0 0 4px var(--success-soft)}
+.conn[data-state=bad]{border-color:rgba(242,63,67,.35)}.conn[data-state=bad] .conn-dot{background:var(--danger);box-shadow:0 0 0 4px var(--danger-soft)}
+.btn.compact{flex:none;height:36px;padding:0 14px}
+.field>.link-btn{align-self:flex-start;padding:2px 0}
+#pane-device>.esp32-only{display:flex;flex-direction:column;gap:18px}
 .sheet-foot{padding:12px 16px calc(env(safe-area-inset-bottom) + 16px);border-top:1px solid var(--border-soft);background:var(--surface-2)}
 .btn{height:48px;padding:0 18px;border-radius:var(--radius);border:1px solid transparent;font-size:16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,opacity .15s,transform .1s}
 .btn:active{transform:scale(.98)}
@@ -212,6 +252,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 }
 /* Login */
 .login{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:24px;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .25s}
+.backend-mode #bleChip,.backend-mode #bluetooth{display:none!important}
+.backend-mode .esp32-only{display:none!important}
 .login.show{opacity:1;pointer-events:auto}
 .login form{width:min(340px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
 .login .badge{width:64px;height:64px;border-radius:20px;background:var(--accent);color:#fff;display:grid;place-items:center;box-shadow:0 10px 30px rgba(88,101,242,.4);margin-bottom:6px}
@@ -233,6 +275,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
     <div class="chips">
       <span class="chip" id="bleChip" data-state="wait" role="img" aria-label="Keyboard status"><i data-i="bluetooth"></i></span>
       <span class="chip" id="serverChip" data-state="wait" role="img" aria-label="Server status"><i data-i="server"></i></span>
+      <span class="chip" id="desktopChip" data-state="wait" role="img" aria-label="Desktop client status"><i data-i="keyboard"></i></span>
       <button class="icon-btn round" id="bluetooth" aria-pressed="false"><i data-i="keyboardOff"></i></button>
     </div>
     <button class="icon-btn round" id="openSettings" aria-label="Settings" aria-haspopup="dialog"><i data-i="settings"></i></button>
@@ -316,7 +359,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
         <div class="field"><label for="f-max">Stop recording after</label>
           <select id="f-max" name="maxSeconds"><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option>
             <option value="600">10 minutes</option><option value="1800">30 minutes</option><option value="3600">1 hour</option></select></div>
-        <div class="field"><label for="f-speed">Typing speed</label>
+        <div class="field esp32-only"><label for="f-speed">Typing speed</label>
           <select id="f-speed" name="keyDelayMs"><option value="0">Ultra fast</option><option value="4">Fast</option><option value="8">Normal</option><option value="20">Reliable</option><option value="40">Slow</option></select>
           <p class="hint">Use a slower speed if the device misses characters.</p></div>
       </section>
@@ -327,8 +370,13 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
           <p class="hint">The transcription gateway. Use HTTPS when this page is opened over HTTPS.</p></div>
         <div class="field"><label for="f-key">API key</label>
           <div class="input-group"><input id="f-key" name="apiKey" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Not required">
-          <button type="button" id="toggleKey" aria-label="Show API key" aria-pressed="false"><i data-i="eye"></i></button></div></div>
-        <div class="test-row"><button type="button" class="btn secondary" id="testServer"><i data-i="activity"></i>Test connection</button><span class="test-result" id="testResult" aria-live="polite"></span></div>
+          <button type="button" id="toggleKey" aria-label="Show API key" aria-pressed="false"><i data-i="eye"></i></button></div>
+          <button type="button" class="link-btn backend-only" id="refreshApiKey" hidden>Generate a new API key</button></div>
+        <div class="conn" id="conn" data-state="idle" aria-live="polite">
+          <span class="conn-dot" aria-hidden="true"></span>
+          <span class="text"><span class="title" id="connTitle">Not checked yet</span><span class="hint" id="connDetail">Checks the URL and API key above.</span></span>
+          <button type="button" class="btn secondary compact" id="testServer"><i data-i="activity"></i>Test</button>
+        </div>
         <details><summary>Advanced<i data-i="chevron"></i></summary><div class="inner">
           <div class="field"><label for="f-model">Model</label>
             <input id="f-model" name="model" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
@@ -339,6 +387,30 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
       </section>
 
       <section class="pane" id="pane-device" role="tabpanel" aria-labelledby="tab-device" hidden>
+        <div class="backend-only" id="desktopClient" hidden>
+          <div class="group">
+            <div class="group-head"><h3>Connected computers</h3><span class="count" id="clientCount">0</span></div>
+            <ul class="client-list" id="clientList" aria-live="polite"></ul>
+          </div>
+          <div class="group">
+            <div class="group-head"><h3>Add a computer</h3></div>
+            <ol class="steps">
+              <li><span class="step-title">Choose its operating system</span>
+                <div class="os-tabs" role="tablist" aria-label="Computer operating system">
+                  <button type="button" role="tab" data-install-os="unix" aria-selected="true">macOS / Linux</button>
+                  <button type="button" role="tab" data-install-os="windows" aria-selected="false">Windows</button>
+                </div></li>
+              <li><span class="step-title" id="runHint">Paste this in Terminal</span>
+                <div class="code-box"><code id="installCommand" aria-labelledby="runHint">Generating…</code>
+                  <button type="button" class="copy-btn" id="copyCommand" aria-label="Copy install command" disabled><i data-i="copy"></i><span>Copy</span></button></div>
+                <div class="code-meta"><span class="hint">Reusable on any number of computers</span><button type="button" class="link-btn" id="generateInstall">New command</button></div></li>
+              <li><span class="step-title">Keep it running</span>
+                <p class="hint">It connects automatically and types into the focused window. Manage it with <code>voice-keyboard status</code>, <code>stop</code> and <code>start</code>.</p></li>
+            </ol>
+          </div>
+          <a class="row-link" href="/downloads" target="_blank" rel="noopener"><i data-i="phone"></i><span class="text"><span class="title">Phones and tablets</span><span class="hint">Install the Android or iOS keyboard</span></span><i data-i="right"></i></a>
+        </div>
+        <div class="esp32-only">
         <dl class="about"><dt>IP address</dt><dd id="infoIp">–</dd><dt>Local name</dt><dd id="infoHost">–</dd><dt>Wi-Fi signal</dt><dd id="infoSignal">–</dd><dt>Access point</dt><dd id="infoAp">–</dd></dl>
         <div class="callout"><i data-i="alert"></i><span>Changing these restarts the keyboard. A new Bluetooth name needs pairing again.</span></div>
         <div class="field"><label for="f-ble">Bluetooth name</label><input id="f-ble" name="bleName" type="text" maxlength="29" autocapitalize="off"></div>
@@ -352,7 +424,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
           <div class="input-group"><input id="f-webpass" name="webPassword" type="password" autocomplete="new-password" placeholder="Unchanged">
           <button type="button" data-reveal="f-webpass" aria-label="Show password" aria-pressed="false"><i data-i="eye"></i></button></div>
           <p class="hint">Any text or number. Other devices will need to log in again.</p></div>
-        <button type="button" class="btn secondary" id="signOut"><i data-i="x"></i>Sign out of this device</button>
+        </div>
+        <button type="button" class="link-btn danger" id="signOut">Sign out of this browser</button>
       </section>
     </form>
     <div class="sheet-foot"><button class="btn primary" id="save" disabled>Save changes</button></div>
@@ -361,6 +434,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 
 <script>
 "use strict";
+const BACKEND_MODE=window.BACKEND_MODE===true;
 // Lucide icons (ISC license), inlined so the page works offline.
 const ICONS={
   mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
@@ -368,6 +442,7 @@ const ICONS={
   settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   keyboardOff:'<path d="M20 4a2 2 0 0 1 2 2v10.4M7 16h9M9.7 4H20M14 8h.01M18 8h.01M2 2l20 20M20 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2M6 8h.01M8 12h.01"/>',
   keyboard:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>',
+  download:'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
   bluetooth:'<path d="m7 7 10 10-5 5V2l5 5L7 17"/>',
   server:'<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
   delete:'<path d="M10 5a2 2 0 0 0-1.34.52l-6.33 5.74a1 1 0 0 0 0 1.48l6.33 5.74A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6M18 9l-6 6"/>',
@@ -382,7 +457,9 @@ const ICONS={
   sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/>',
   cpu:'<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
   up:'<path d="m18 15-6-6-6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',
-  chevron:'<path d="m6 9 6 6 6-6"/>'
+  chevron:'<path d="m6 9 6 6 6-6"/>',
+  copy:'<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>'
 };
 const svg=n=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 function paintIcons(root=document){root.querySelectorAll('i[data-i]').forEach(el=>{const t=document.createElement('template');t.innerHTML=svg(el.dataset.i);const s=t.content.firstChild;if(el.className)s.classList.add(...el.className.split(' '));el.replaceWith(s)})}
@@ -390,6 +467,7 @@ paintIcons();
 
 const $=s=>document.querySelector(s);
 const app=$('#app'),mic=$('#mic'),statusEl=$('#status'),timerEl=$('#timer'),wave=$('#wave'),halo=$('#halo');
+if(BACKEND_MODE){$('#bleChip').hidden=true;$('#bluetooth').hidden=true}else{$('#desktopChip').hidden=true}
 const BARS=31;for(let i=0;i<BARS;i++)wave.appendChild(document.createElement('span'));
 const bars=[...wave.children];
 let cfg={},deviceStatus={},state='idle';
@@ -423,6 +501,13 @@ function setChip(el,s,label,full){el.dataset.state=s;el.setAttribute('aria-label
 async function pollDevice(){
   try{
     deviceStatus=await (await fetch('/api/status',{cache:'no-store'})).json();
+    if(BACKEND_MODE){
+      const connected=(deviceStatus.clients||0)>0;
+      const names=(deviceStatus.clientList||[]).map(client=>client.id).join(', ');
+      setChip($('#desktopChip'),connected?'ok':'wait',connected?`${deviceStatus.clients} connected`:'No client',connected?`Desktop clients: ${names}`:'No desktop client connected');
+      window.renderClients?.(deviceStatus.clientList||[]);
+      $('#bluetooth').hidden=true;lockKeys(!connected);return;
+    }
     const {ble,bleEnabled}=deviceStatus;
     setChip($('#bleChip'),!bleEnabled?'off':ble?'ok':'wait',!bleEnabled?'Off':ble?'Connected':'Waiting',
       'Keyboard '+(!bleEnabled?'turned off':ble?'connected':'waiting for the device to connect'));
@@ -464,7 +549,7 @@ async function startDictation(){
   if(!window.isSecureContext||!navigator.mediaDevices){toast('The microphone needs HTTPS. Open this page through your HTTPS proxy.',{error:true});return}
   if(!cfg.serverUrl){toast('Set the server URL in Settings first.',{error:true,action:'Open',onAction:()=>openSheet('server')});return}
   if(location.protocol==='https:'&&serverUrl('').protocol==='http:'){toast('This page is HTTPS, so the server URL must be HTTPS too.',{error:true,action:'Fix',onAction:()=>openSheet('server')});return}
-  if(deviceStatus.bleEnabled===false)setBluetooth(true);  // Not awaited: the mic must start inside the tap.
+  if(!BACKEND_MODE&&deviceStatus.bleEnabled===false)setBluetooth(true);  // Not awaited: the mic must start inside the tap.
   setState('connecting');say('Starting…');
   if(!sharedCtx||sharedCtx.state==='closed'){sharedCtx=new (window.AudioContext||window.webkitAudioContext)();workletLoaded=false}
   const ctx=sharedCtx,resumed=ctx.resume();  // Resumed inside the tap, as iOS requires.
@@ -530,13 +615,14 @@ async function finish(text){
   cleanup();text=(text||'').trim();
   if(live){setState('idle');await liveChain;
     if(!typedAny)return say('No speech detected');
-    try{await post('/api/type?after=1','')}catch{}  // Only the "after dictation" key.
+    if(BACKEND_MODE)pressAfterKey();else try{await post('/api/type?after=1','')}catch{}  // Only the "after dictation" key.
     return liveError?say('Some text could not be typed',true):watchTyping();}
   if(!text){setState('idle');say('No speech detected');return}
   setState('idle');await typeOnDevice(text);
 }
 
 function typeLive(text){
+  if(BACKEND_MODE)return; // The gateway routes segments directly to the desktop client.
   const chunk=text;if(!chunk)return;typedAny=true;  // Pieces arrive with their own separators.
   liveChain=liveChain.then(async()=>{
     for(let attempt=0;attempt<25;attempt++){
@@ -551,6 +637,7 @@ function typeLive(text){
 }
 
 async function typeOnDevice(text){
+  if(BACKEND_MODE){pressAfterKey();say('Text sent to the connected computer');watchTyping();return}
   if(!deviceStatus.ble){say('Waiting for the keyboard to connect…');await waitForKeyboard()}
   try{await post('/api/type?after=1',text);say(`Typing ${text.split(/\s+/).length} words…`);watchTyping()}
   catch(e){say('Tap the microphone to dictate');toast(e.message,{error:true,action:'Retry',onAction:()=>typeOnDevice(text)})}
@@ -579,7 +666,10 @@ function draw(){
   let sum=0;for(const v of audio.data){const d=(v-128)/128;sum+=d*d}
   const level=Math.min(1,Math.sqrt(sum/audio.data.length)*3),now=performance.now();
   if(ws&&ws.readyState===1&&now-lastLevelSent>=100){ws.send(`{"type":"level","v":${level.toFixed(2)}}`);lastLevelSent=now}  // For mirrored UIs.
-  if(render(level,startedAt)>=(cfg.maxSeconds||600)){stopDictation();return}
+  // Live transcription can keep typing recognized phrases indefinitely. The
+  // configured recording limit applies only when text is finalized at the end.
+  const elapsed=render(level,startedAt);
+  if(!live&&elapsed>=(cfg.maxSeconds||600)){stopDictation();return}
   frame=requestAnimationFrame(draw);
 }
 
@@ -627,6 +717,8 @@ document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document
 // ---------- Keys ----------
 // Requests are chained so "down", "hold" and "up" reach the ESP32 in order.
 let keyChain=Promise.resolve();
+// The ESP32 presses the "after dictation" key itself; the backend needs it sent.
+function pressAfterKey(){if(cfg.afterText==='space'||cfg.afterText==='enter')sendKey('k='+cfg.afterText)}
 function sendKey(query){keyChain=keyChain.then(()=>fetch('/api/key?'+query,{method:'POST'}).then(async r=>{if(!r.ok)toast(await r.text(),{error:true})})).catch(()=>{})}
 // Backspace and the arrows: one press per tap, auto-repeat while held.
 document.querySelectorAll('[data-key]').forEach(function holdToRepeat(btn){
@@ -652,9 +744,9 @@ $('#bluetooth').addEventListener('click',()=>setBluetooth(deviceStatus.bleEnable
 async function waitForKeyboard(ms=10000){const end=Date.now()+ms;while(Date.now()<end){await pollDevice();if(deviceStatus.ble)return true;await new Promise(r=>setTimeout(r,500))}return false}
 
 // ---------- Settings sheet ----------
-const sheet=$('#sheet'),form=$('#form'),saveBtn=$('#save'),tabs=[...document.querySelectorAll('[role=tab]')];
+const sheet=$('#sheet'),form=$('#form'),saveBtn=$('#save'),tabs=[...document.querySelectorAll('.tabs [role=tab]')];
 function selectTab(name,focus){tabs.forEach((t,i)=>{const on=t.id==='tab-'+name;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1;
-  $('#'+t.getAttribute('aria-controls')).hidden=!on;if(on){$('#tabPill').style.transform=`translateX(${i*100}%)`;focus&&t.focus()}})}
+  $('#'+t.getAttribute('aria-controls')).hidden=!on;if(on){if(name==='device')window.onDeviceTab?.();if(name==='server')testConnection();$('.sheet-foot').hidden=BACKEND_MODE&&name==='device';$('#tabPill').style.transform=`translateX(${i*100}%)`;focus&&t.focus()}})}
 tabs.forEach((t,i)=>{t.addEventListener('click',()=>selectTab(t.id.slice(4)));
   t.addEventListener('keydown',e=>{const d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(d)selectTab(tabs[(i+d+tabs.length)%tabs.length].id.slice(4),true)})});
 
@@ -665,14 +757,14 @@ function fillForm(){
     else if(el.name==='wifiPassword'||el.name==='webPassword')el.value='';
     else if(v!==undefined){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(v)))el.add(new Option(String(v),v));el.value=v}}
   $('#hostHint').textContent=`Reachable at http://${cfg.hostname||'voice-keyboard'}.local`;
-  $('#testResult').textContent='';$('#testResult').className='test-result';saveBtn.disabled=true;
+  setConn('idle','Not checked yet','Checks the URL and API key above.');saveBtn.disabled=true;
 }
 function changes(){const out=new URLSearchParams();
   for(const el of form.querySelectorAll('input[type=checkbox][name]'))if(el.checked!==!!cfg[el.name])out.set(el.name,el.checked?'1':'0');
   for(const[k,v]of new FormData(form)){if(form.elements[k]?.type==='checkbox')continue;if(k==='wifiPassword'||k==='webPassword'?v:String(cfg[k]??'')!==v)out.set(k,v)}return out}
 form.addEventListener('input',()=>{saveBtn.disabled=![...changes()].length});
 
-function openSheet(tab='general'){fillForm();selectTab(tab);sheet.showModal();$('#sheetTitle').focus();requestAnimationFrame(()=>requestAnimationFrame(()=>sheet.classList.add('open')))}
+function openSheet(tab='general'){fillForm();selectTab(tab);try{if(!sheet.open)sheet.showModal()}catch(error){console.warn('Dialog API unavailable; using fallback',error);sheet.setAttribute('open','')}$('#sheetTitle').focus();requestAnimationFrame(()=>requestAnimationFrame(()=>sheet.classList.add('open')))}
 function closeSheet(){if(!sheet.open)return;sheet.classList.remove('open');sheet.style.removeProperty('--drag');
   const done=()=>{sheet.close();$('#openSettings').focus()};matchMedia('(prefers-reduced-motion:reduce)').matches?done():setTimeout(done,300)}
 $('#openSettings').addEventListener('click',()=>openSheet());
@@ -691,14 +783,20 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
   const input=b.dataset.reveal?$('#'+b.dataset.reveal):$('#f-key'),show=input.type==='password';input.type=show?'text':'password';
   b.setAttribute('aria-pressed',show);b.querySelector('svg').innerHTML=ICONS[show?'eyeOff':'eye']}));
 
-$('#testServer').addEventListener('click',async()=>{const out=$('#testResult');out.className='test-result';out.textContent='Checking…';
+function setConn(state,title,detail){$('#conn').dataset.state=state;$('#connTitle').textContent=title;$('#connDetail').textContent=detail}
+async function testConnection(){
+  const button=$('#testServer');if(button.disabled)return;button.disabled=true;
   const url=form.elements.serverUrl.value||cfg.serverUrl,key=form.elements.apiKey.value;
+  if(!url){setConn('bad','No server URL','Enter the transcription server address above.');button.disabled=false;return}
+  setConn('checking','Checking…',url.replace(/^https?:\/\//,''));
   let r=await checkServer(url);
   if(r.ok)try{const a=await fetch(new URL(String(url).replace(/\/+$/,'')+'/v1/models',location.href),{headers:key?{Authorization:'Bearer '+key}:{},signal:AbortSignal.timeout(6000)});
-    if(a.status===401)r={ok:false,reason:key?'The API key was rejected':'This server needs an API key'};else if(a.ok)r={ok:true,reason:'Connected, API key accepted'}}catch{}
-  out.className='test-result '+(r.ok?'ok':'bad');out.innerHTML=svg(r.ok?'check':'alert');out.append(r.reason)});
+    if(a.status===401)r={ok:false,reason:key?'The API key was rejected':'This server needs an API key'};else if(a.ok)r={ok:true,reason:key?'Server reachable, API key accepted':'Server reachable'}}catch{}
+  setConn(r.ok?'ok':'bad',r.ok?'Connected':'Not connected',r.reason);button.disabled=false}
+$('#testServer').addEventListener('click',testConnection);
 
 saveBtn.addEventListener('click',async()=>{
+  if(BACKEND_MODE)return;
   const body=changes();if(![...body].length)return;
   saveBtn.disabled=true;saveBtn.textContent='Saving…';
   try{const result=await post('/api/settings',body);closeSheet();
@@ -708,7 +806,54 @@ saveBtn.addEventListener('click',async()=>{
   finally{saveBtn.textContent='Save changes'}
 });
 
-async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);cfg=await r.json()}
+async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}');cfg={...serverCfg,...saved,serverUrl:serverCfg.serverUrl,apiKey:serverCfg.apiKey}}catch{};$('#desktopClient').hidden=false}}
+
+if(BACKEND_MODE){
+  $('#refreshApiKey').hidden=false;
+  $('#refreshApiKey').addEventListener('click',async()=>{
+    if(!confirm('Refresh the API key? Existing direct API-key clients will need the new key.'))return;
+    const button=$('#refreshApiKey');button.disabled=true;
+    try{const response=await fetch('/api/api-key/refresh',{method:'POST'});if(!response.ok)throw new Error('Could not refresh API key');const result=await response.json();cfg.apiKey=result.apiKey;localStorage.setItem('voice-keyboard-settings',JSON.stringify(cfg));$('#f-key').value=result.apiKey;toast('API key refreshed')}catch(error){toast(error.message,{error:true})}finally{button.disabled=false}
+  });
+  saveBtn.addEventListener('click',()=>{
+    const body=changes();if(![...body].length)return;
+    for(const [key,value] of body)cfg[key]=value;
+    localStorage.setItem('voice-keyboard-settings',JSON.stringify(cfg));
+    saveBtn.disabled=true;closeSheet();toast('Settings saved');pollServer();reconnectEvents();
+  });
+  let install=null,installOs=/Win/.test(navigator.platform||navigator.userAgent)?'windows':'unix';
+  function renderInstall(){
+    document.querySelectorAll('[data-install-os]').forEach(tab=>tab.setAttribute('aria-selected',tab.dataset.installOs===installOs));
+    $('#runHint').textContent=installOs==='windows'?'Paste this in PowerShell':'Paste this in Terminal';
+    $('#installCommand').textContent=install?(installOs==='windows'?install.powershell:install.shell):'Loading…';
+    $('#copyCommand').disabled=!install;
+  }
+  document.querySelectorAll('[data-install-os]').forEach(tab=>tab.addEventListener('click',()=>{installOs=tab.dataset.installOs;renderInstall()}));
+  // The command stays valid until replaced; replacing it only affects new installs.
+  async function loadInstallCommand(replace){
+    if(replace&&!confirm('Create a new install command? The current one will stop working for new installs. Computers and phones already connected are not affected.'))return;
+    const button=$('#generateInstall');button.disabled=true;install=null;renderInstall();
+    try{
+      const headers=cfg.apiKey?{Authorization:'Bearer '+cfg.apiKey}:{};
+      const response=await fetch('/api/enroll',{method:replace?'POST':'GET',headers});
+      if(!response.ok)throw new Error(response.status===401?'Your login session expired. Please log in again.':'Could not load the install command');
+      install=await response.json();if(replace)toast('New install command created');
+    }catch(error){$('#installCommand').textContent='Could not load the install command.';toast(error.message,{error:true})}
+    finally{button.disabled=false;renderInstall()}
+  }
+  window.renderClients=clients=>{
+    const list=$('#clientList');list.replaceChildren(...(clients.length?clients.map(client=>{const li=document.createElement('li');li.textContent=client.id;return li}):[Object.assign(document.createElement('li'),{className:'empty',textContent:'No computer connected yet'})]));
+    $('#clientCount').textContent=clients.length;$('#clientCount').classList.toggle('on',clients.length>0);
+  };
+  window.onDeviceTab=()=>{if(!install)loadInstallCommand(false);else renderInstall()};
+  $('#generateInstall').addEventListener('click',()=>loadInstallCommand(true));
+  $('#copyCommand').addEventListener('click',async()=>{
+    const button=$('#copyCommand');
+    try{await navigator.clipboard.writeText($('#installCommand').textContent)}catch{const range=document.createRange();range.selectNodeContents($('#installCommand'));getSelection().removeAllRanges();getSelection().addRange(range);document.execCommand('copy')}
+    button.classList.add('done');button.querySelector('span').textContent='Copied';setTimeout(()=>{button.classList.remove('done');button.querySelector('span').textContent='Copy'},1800);
+  });
+  $('#tab-device').lastChild.textContent='Computers';
+}
 
 // ---------- Login ----------
 const nativeFetch=window.fetch.bind(window);let locked=false;

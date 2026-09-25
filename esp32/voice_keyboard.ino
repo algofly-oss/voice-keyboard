@@ -8,18 +8,32 @@
 #include <esp_random.h>
 #include <mbedtls/sha256.h>
 
+#include "firmware_config.h"
 #include "web_app.h"
 
 // Defaults used until they are changed from the web settings page.
 // Router credentials shared with the other projects in this repository.
-constexpr char DEFAULT_WIFI_NAME[] = "pluto";
-constexpr char DEFAULT_WIFI_PASSWORD[] = "";
+#ifndef VK_DEFAULT_WIFI_NAME
+#define VK_DEFAULT_WIFI_NAME ""
+#endif
+#ifndef VK_DEFAULT_WIFI_PASSWORD
+#define VK_DEFAULT_WIFI_PASSWORD ""
+#endif
+#ifndef VK_DEFAULT_SERVER_URL
+#define VK_DEFAULT_SERVER_URL ""
+#endif
+#ifndef VK_DEFAULT_API_KEY
+#define VK_DEFAULT_API_KEY "change-me"
+#endif
+
+constexpr char DEFAULT_WIFI_NAME[] = VK_DEFAULT_WIFI_NAME;
+constexpr char DEFAULT_WIFI_PASSWORD[] = VK_DEFAULT_WIFI_PASSWORD;
 constexpr char DEFAULT_HOSTNAME[] = "voice-keyboard";
 constexpr char DEFAULT_BLE_NAME[] = "ESP32 Voice Keyboard";
-constexpr char DEFAULT_SERVER_URL[] = "https://voice-keyboard-transcription.algofly.ai";
+constexpr char DEFAULT_SERVER_URL[] = VK_DEFAULT_SERVER_URL;
 constexpr char DEFAULT_WHISPER_MODEL[] = "deepdml/faster-whisper-large-v3-turbo-ct2";
 // Must match API_KEY in backend/.env.
-constexpr char DEFAULT_API_KEY[] = "change-me";
+constexpr char DEFAULT_API_KEY[] = VK_DEFAULT_API_KEY;
 // Password for the web app; any string, changeable in Settings > Device.
 constexpr char DEFAULT_WEB_PASSWORD[] = "change-me";
 constexpr char SETUP_AP_NAME[] = "VoiceKeyboard-Setup";
