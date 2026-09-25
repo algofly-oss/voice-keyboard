@@ -40,6 +40,8 @@ WHISPER_URL = os.environ.get("WHISPER_URL", "http://127.0.0.1:8001").rstrip("/")
 DEFAULT_MODEL = os.environ.get("WHISPER_MODEL", "deepdml/faster-whisper-large-v3-turbo-ct2")
 # "translate" types an English translation of any spoken language (see start.sh).
 TRANSLATE = os.environ.get("WHISPER_VARIANT", "transcribe") == "translate"
+# Language new browsers start with ("" = detect automatically); users can change it.
+DEFAULT_LANGUAGE = os.environ.get("WHISPER_LANGUAGE", "en").strip()
 API_KEY = os.environ.get("API_KEY") or None
 AUTH_FILE = Path(os.environ.get("AUTH_FILE", "/data/auth.json"))
 
@@ -512,7 +514,7 @@ async def backend_key(request: Request):
 @app.get("/api/settings")
 async def backend_settings(request: Request):
     require_user(request)
-    return {"liveTyping": True, "language": "", "afterText": "none", "maxSeconds": 600,
+    return {"liveTyping": True, "language": DEFAULT_LANGUAGE, "afterText": "none", "maxSeconds": 600,
             "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe",
             "pace": DEFAULT_PACE,
             # With Caddy's local CA, install commands trust it on first contact.
