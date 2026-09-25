@@ -594,7 +594,6 @@ async function startDictation(){
 
 function openStream(){
   const url=serverUrl('/v1/stream');url.protocol=url.protocol==='https:'?'wss:':'ws:';
-  if(cfg.apiKey)url.searchParams.set('token',cfg.apiKey);
   let sock;try{sock=new WebSocket(url)}catch{fail('The server URL is not valid.');return false}
   ws=sock;sock.binaryType='arraybuffer';connText='';
   sock.onopen=()=>{
@@ -723,7 +722,6 @@ let events=null,remote=null;
 function connectEvents(){
   if(!cfg.serverUrl||(location.protocol==='https:'&&serverUrl('').protocol==='http:'))return;
   const u=serverUrl('/v1/events');u.protocol=u.protocol==='https:'?'wss:':'ws:';
-  if(cfg.apiKey)u.searchParams.set('token',cfg.apiKey);
   let e;try{e=events=new WebSocket(u)}catch{return}
   e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.type==='devices')return pollDevice();if(m.owner===clientId)return;
     if(m.type==='state'){if(m.active)enterRemote(m);else if(remote)exitRemote(m.final)}
