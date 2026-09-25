@@ -48,8 +48,8 @@ func typingBackendName() string {
 }
 
 const linuxSetupHint = `allow access to the virtual keyboard device once with:
-  echo 'KERNEL=="uinput", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/60-voice-keyboard.rules
-  echo uinput | sudo tee /etc/modules-load.d/voice-keyboard.conf
+  echo 'KERNEL=="uinput", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/60-vkeyboard.rules
+  echo uinput | sudo tee /etc/modules-load.d/vkeyboard.conf
   sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --name-match=uinput`
 
 func checkTypingPermission(prompt bool) error {

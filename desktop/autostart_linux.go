@@ -14,7 +14,7 @@ func autostartPath() string {
 		home, _ := os.UserHomeDir()
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "autostart", "voice-keyboard.desktop")
+	return filepath.Join(dir, "autostart", "vkeyboard.desktop")
 }
 
 func enableAutostart() error {
@@ -41,6 +41,11 @@ X-GNOME-Autostart-enabled=true
 		return nil
 	}
 	return startDetached()
+}
+
+// removeOldAutostart deletes the login item of releases named voice-keyboard.
+func removeOldAutostart() {
+	_ = os.Remove(filepath.Join(filepath.Dir(autostartPath()), "voice-keyboard.desktop"))
 }
 
 func disableAutostart() error {

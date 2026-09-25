@@ -17,7 +17,7 @@ import (
 
 // Protocol (backend /v1/keyboard):
 //
-//	client -> {"type":"hello","client":"<name>","room":"voice-keyboard"}
+//	client -> {"type":"hello","client":"<name>","machine":"…","platform":"…","version":"…"}
 //	server -> {"type":"ready","credential":"…"}              credential replaces an install token
 //	server -> {"type":"segment","text":"…"}                  type verbatim
 //	server -> {"type":"key","key":"enter","state":"press"}   press|down|up|hold
@@ -101,7 +101,7 @@ func enroll(ctx context.Context, server, token, name string) (config, error) {
 // not ready yet at login, even a panic) is logged and retried with back-off
 // until ctx is cancelled by stop/logout.
 func serve(ctx context.Context, cfg config) error {
-	log.Printf("voice-keyboard %s starting as %q (%s)", version, cfg.Client, typingBackendName())
+	log.Printf("vkeyboard %s starting as %q (%s)", version, cfg.Client, typingBackendName())
 	go watchPermission(ctx)
 	kb := waitForKeyboard(ctx)
 	if kb == nil {

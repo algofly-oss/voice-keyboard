@@ -2,5 +2,5 @@ backend/.env
 backend/volumes/
 *.pyc
 __pycache__/
-desktop/voice-keyboard
-desktop/voice-keyboard-*
+desktop/vkeyboard
+desktop/vkeyboard-*

@@ -38,16 +38,41 @@ func configDir() string {
 	if err != nil {
 		dir = os.TempDir()
 	}
-	return filepath.Join(dir, "voice-keyboard")
+	return filepath.Join(dir, "vkeyboard")
 }
 
 func configPath() string { return filepath.Join(configDir(), "config.json") }
+
+// oldConfigDir is where releases before 1.3 (named voice-keyboard) kept their files.
+func oldConfigDir() string { return filepath.Join(filepath.Dir(configDir()), "voice-keyboard") }
+
+// removeOldInstall retires a client installed under the old name: it stops
+// that agent, removes its login item and deletes its settings (keeping the
+// machine id, so the web app shows the same client, not a new one).
+func removeOldInstall() {
+	machineID()
+	var old state
+	if data, err := os.ReadFile(filepath.Join(oldConfigDir(), "state.json")); err == nil {
+		_ = json.Unmarshal(data, &old)
+	}
+	if old.running() && old.PID != os.Getpid() {
+		_ = stopProcess(old.PID)
+	}
+	removeOldAutostart()
+	_ = os.RemoveAll(oldConfigDir())
+}
 
 // machineID identifies this computer across reinstalls, so pairing again
 // updates the same entry in the web app instead of adding a duplicate.
 func machineID() string {
 	path := filepath.Join(configDir(), "machine-id")
 	if data, err := os.ReadFile(path); err == nil && len(data) >= 16 {
+		return string(data)
+	}
+	// Keep the id of an install made under the old "voice-keyboard" name.
+	if data, err := os.ReadFile(filepath.Join(oldConfigDir(), "machine-id")); err == nil && len(data) >= 16 {
+		_ = os.MkdirAll(configDir(), 0o700)
+		_ = os.WriteFile(path, data, 0o600)
 		return string(data)
 	}
 	buf := make([]byte, 16)
@@ -58,7 +83,7 @@ func machineID() string {
 	return id
 }
 func statePath() string { return filepath.Join(configDir(), "state.json") }
-func logPath() string   { return filepath.Join(configDir(), "voice-keyboard.log") }
+func logPath() string   { return filepath.Join(configDir(), "vkeyboard.log") }
 
 func loadConfig() (config, error) {
 	var cfg config
@@ -102,7 +127,7 @@ func writeJSON(path string, v any) error {
 }
 
 // redirectLogIfDetached writes logs to a rolling log file (read by
-// `voice-keyboard logs`), and to the terminal when there is one. The file comes
+// `vkeyboard logs`), and to the terminal when there is one. The file comes
 // first so a missing console (Windows login item) cannot stop it being written.
 func redirectLogIfDetached() func() {
 	w := &rollingLog{path: logPath(), maxBytes: 1 << 20, keep: 3}

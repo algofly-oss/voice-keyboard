@@ -113,7 +113,7 @@ func checkTypingPermission(prompt bool) error {
 		cfRelease(options)
 		_ = exec.Command("open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility").Start()
 	}
-	return errors.New("allow voice-keyboard in System Settings → Privacy & Security → Accessibility; " +
+	return errors.New("allow vkeyboard in System Settings → Privacy & Security → Accessibility; " +
 		"typing starts as soon as it is allowed")
 }
 

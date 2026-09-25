@@ -17,7 +17,7 @@ out=$(mktemp -d)
 (cd desktop && for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   goos=${target%/*}; goarch=${target#*/}; ext=""; ldflags="-s -w -X main.version=$version"
   [ "$goos" = windows ] && ext=.exe && ldflags="$ldflags -H windowsgui"
-  CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -trimpath -ldflags "$ldflags" -o "$out/voice-keyboard-$goos-$goarch$ext" .
+  CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -trimpath -ldflags "$ldflags" -o "$out/vkeyboard-$goos-$goarch$ext" .
 done)
 
 git tag -a "$tag" -m "Voice Keyboard $version"

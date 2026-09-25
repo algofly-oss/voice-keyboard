@@ -1,8 +1,8 @@
 #!/bin/sh
-# Installs the Voice Keyboard desktop client on macOS or Linux.
+# Installs the Voice Keyboard desktop client (vkeyboard) on macOS or Linux.
 #   curl -fsSL https://host/client/install.sh | sh -s -- --server https://host --token TOKEN
-# Downloads one self-contained binary to ~/.local/bin, pairs it, and starts it
-# in the background (and at every login). Nothing else is installed.
+# Downloads one self-contained binary to ~/.local/bin, removes any older
+# version, pairs it, and starts it in the background (and at every login).
 set -eu
 
 SERVER=""
@@ -28,27 +28,36 @@ case "$(uname -m)" in
 esac
 
 bin_dir="$HOME/.local/bin"
-bin="$bin_dir/voice-keyboard"
+bin="$bin_dir/vkeyboard"
 mkdir -p "$bin_dir"
-echo "Downloading voice-keyboard for $os/$arch..."
-curl -fsSL "$SERVER/client/voice-keyboard-$os-$arch" -o "$bin.download"
+echo "Downloading vkeyboard for $os/$arch..."
+curl -fsSL "$SERVER/client/vkeyboard-$os-$arch" -o "$bin.download"
 chmod +x "$bin.download"
 
-# Remove any previous installation before installing this one.
-if [ -f "$bin" ] && [ "$(head -c 2 "$bin")" != "#!" ]; then
-  "$bin" stop >/dev/null 2>&1 || true            # earlier release of this client
+# --- Remove older versions before installing this one.
+is_binary() { [ -f "$1" ] && [ "$(head -c 2 "$1")" != "#!" ]; }
+# 1. An earlier vkeyboard (upgrade in place).
+if is_binary "$bin"; then "$bin" stop >/dev/null 2>&1 || true; fi
+# 2. Releases before 1.3, named voice-keyboard. `vkeyboard start` below also
+#    removes their login item and settings, keeping the machine id.
+old="$bin_dir/voice-keyboard"
+if [ -e "$old" ]; then
+  echo "Removing the previous voice-keyboard client..."
+  if is_binary "$old"; then "$old" stop >/dev/null 2>&1 || true; fi
+  rm -f "$old"
 fi
+# 3. The original Python client. Match only a Python interpreter running it,
+#    not e.g. an editor that has the file open.
 legacy="${XDG_DATA_HOME:-$HOME/.local/share}/voice-keyboard"
-# Only a Python interpreter running the old client (not e.g. an editor viewing it).
 legacy_process='^[^ ]*python[0-9.]* [^ ]*voice_keyboard_client\.py'
-if [ -d "$legacy/venv" ] || pgrep -f "$legacy_process" >/dev/null 2>&1; then
+if [ -d "$legacy" ] || pgrep -f "$legacy_process" >/dev/null 2>&1; then
   echo "Removing the previous Python-based client..."
   pkill -f "$legacy_process" 2>/dev/null || true
   rm -rf "$legacy"
-  # On macOS it kept its settings in ~/.config; this client uses Application Support.
+  # On macOS it kept its settings in ~/.config.
   if [ "$os" = darwin ]; then rm -rf "$HOME/.config/voice-keyboard"; fi
 fi
-mv "$bin.download" "$bin"   # replaces the old launcher script, if any
+mv "$bin.download" "$bin"
 
 "$bin" enroll --server "$SERVER" --token "$TOKEN"
 "$bin" start
@@ -56,12 +65,12 @@ mv "$bin.download" "$bin"   # replaces the old launcher script, if any
 if [ "$os" = linux ] && [ -n "${WAYLAND_DISPLAY:-}" ] && [ ! -w /dev/uinput ]; then
   echo
   echo "Wayland: to type into all apps (not only X11 ones), allow the virtual keyboard once:"
-  echo "  echo 'KERNEL==\"uinput\", TAG+=\"uaccess\"' | sudo tee /etc/udev/rules.d/60-voice-keyboard.rules"
-  echo "  echo uinput | sudo tee /etc/modules-load.d/voice-keyboard.conf"
+  echo "  echo 'KERNEL==\"uinput\", TAG+=\"uaccess\"' | sudo tee /etc/udev/rules.d/60-vkeyboard.rules"
+  echo "  echo uinput | sudo tee /etc/modules-load.d/vkeyboard.conf"
   echo "  sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --name-match=uinput"
-  echo "then run: voice-keyboard stop && voice-keyboard start"
+  echo "then run: vkeyboard stop && vkeyboard start"
 fi
 case ":$PATH:" in
   *":$bin_dir:"*) ;;
-  *) echo "Add $bin_dir to your PATH to use the voice-keyboard command, or run $bin directly." ;;
+  *) echo "Add $bin_dir to your PATH to use the vkeyboard command, or run $bin directly." ;;
 esac

@@ -9,8 +9,8 @@ import (
 
 // A per-user LaunchAgent starts the client at login and restarts it if it
 // crashes. launchd, not the terminal, is its parent, so macOS attributes the
-// Accessibility permission to voice-keyboard itself.
-const launchLabel = "ai.algofly.voicekeyboard"
+// Accessibility permission to vkeyboard itself.
+const launchLabel = "ai.algofly.vkeyboard"
 
 func launchAgentPath() string {
 	home, _ := os.UserHomeDir()
@@ -47,6 +47,13 @@ func enableAutostart() error {
 		return fmt.Errorf("launchctl bootstrap: %v: %s", err, out)
 	}
 	return nil
+}
+
+// removeOldAutostart unloads and deletes the LaunchAgent of releases named voice-keyboard.
+func removeOldAutostart() {
+	const oldLabel = "ai.algofly.voicekeyboard"
+	_ = exec.Command("launchctl", "bootout", launchDomain()+"/"+oldLabel).Run()
+	_ = os.Remove(filepath.Join(filepath.Dir(launchAgentPath()), oldLabel+".plist"))
 }
 
 func disableAutostart() error {

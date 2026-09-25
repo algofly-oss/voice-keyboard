@@ -1,4 +1,4 @@
-// Command voice-keyboard types text dictated in the Voice Keyboard web app into
+// Command vkeyboard types text dictated in the Voice Keyboard web app into
 // the focused application on this computer.
 //
 // It is a single self-contained binary: no runtime, packages or services to
@@ -23,15 +23,15 @@ var version = "dev" // set with -ldflags "-X main.version=…"
 const usage = `Voice Keyboard desktop client %s
 
 Usage:
-  voice-keyboard enroll --server URL --token TOKEN   pair this computer
-  voice-keyboard start       start now and at every login
-  voice-keyboard stop        stop and do not start at login
-  voice-keyboard status      show whether it is running and connected
-  voice-keyboard logs        show recent log lines and follow new ones (-n 50, --no-follow)
-  voice-keyboard type-test   type a test string after 3 seconds
-  voice-keyboard uninstall   stop and remove settings and login item
-  voice-keyboard run         run in the foreground (used by the login item)
-  voice-keyboard version
+  vkeyboard enroll --server URL --token TOKEN   pair this computer
+  vkeyboard start       start now and at every login
+  vkeyboard stop        stop and do not start at login
+  vkeyboard status      show whether it is running and connected
+  vkeyboard logs        show recent log lines and follow new ones (-n 50, --no-follow)
+  vkeyboard type-test   type a test string after 3 seconds
+  vkeyboard uninstall   stop and remove settings and login item
+  vkeyboard run         run in the foreground (used by the login item)
+  vkeyboard version
 `
 
 func main() {
@@ -66,7 +66,7 @@ func main() {
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "voice-keyboard:", err)
+		fmt.Fprintln(os.Stderr, "vkeyboard:", err)
 		os.Exit(1)
 	}
 }
@@ -102,6 +102,7 @@ func startCommand() error {
 	if _, err := loadConfig(); err != nil {
 		return err
 	}
+	removeOldInstall()
 	if err := enableAutostart(); err != nil {
 		return fmt.Errorf("could not register the login item: %w", err)
 	}
@@ -126,7 +127,7 @@ func stopCommand() error {
 		}
 	}
 	_ = waitForState(func(s state) bool { return !s.running() }, 5*time.Second)
-	fmt.Println("Stopped. It will not start at login until you run: voice-keyboard start")
+	fmt.Println("Stopped. It will not start at login until you run: vkeyboard start")
 	return nil
 }
 
@@ -140,7 +141,7 @@ func statusCommand() error {
 	fmt.Printf("Client:     %s\nServer:     %s\n", cfg.Client, cfg.Server)
 	switch {
 	case !s.running():
-		fmt.Println("Running:    no (start it with: voice-keyboard start)")
+		fmt.Println("Running:    no (start it with: vkeyboard start)")
 	case s.Connected:
 		fmt.Printf("Running:    yes, connected since %s\n", s.Since.Local().Format("Jan 2 15:04"))
 		if s.Selected != nil {

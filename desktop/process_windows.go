@@ -12,7 +12,7 @@ var procAttachConsole = syscall.NewLazyDLL("kernel32.dll").NewProc("AttachConsol
 
 // The Windows build uses the GUI subsystem so the login item runs without a
 // console window. When run from a terminal it attaches to that console so
-// commands still print their output (voice-keyboard.cmd waits for it).
+// commands still print their output (vkeyboard.cmd waits for it).
 func init() {
 	const attachParentProcess = ^uintptr(0) // ATTACH_PARENT_PROCESS, (DWORD)-1
 	if r, _, _ := procAttachConsole.Call(attachParentProcess); r == 0 {

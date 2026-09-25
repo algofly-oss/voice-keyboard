@@ -330,8 +330,27 @@ async def web_ui():
     return HTMLResponse(WEB_SOURCE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
 
+# Icons for tabs, bookmarks and home-screen shortcuts; fixed names only.
+WEB_ASSETS = {"favicon.ico": ("icons/favicon.ico", "image/x-icon"),
+              "manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+              **{f"icons/{name}": (f"icons/{name}", kind) for name, kind in (
+                  ("icon.svg", "image/svg+xml"), ("icon-32.png", "image/png"), ("icon-192.png", "image/png"),
+                  ("icon-512.png", "image/png"), ("apple-touch-icon.png", "image/png"))}}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/manifest.webmanifest", include_in_schema=False)
+@app.get("/icons/{name}", include_in_schema=False)
+async def web_asset(request: Request):
+    asset = WEB_ASSETS.get(request.url.path.lstrip("/"))
+    if not asset:
+        raise HTTPException(404, "Not found")
+    return FileResponse(WEB_SOURCE.parent / asset[0], media_type=asset[1],
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
 # Desktop client: one self-contained binary per OS/CPU, fetched by /client/install.*
-DESKTOP_BINARIES = [f"voice-keyboard-{os_}-{arch}{'.exe' if os_ == 'windows' else ''}"
+DESKTOP_BINARIES = [f"vkeyboard-{os_}-{arch}{'.exe' if os_ == 'windows' else ''}"
                     for os_ in ("linux", "darwin", "windows") for arch in ("amd64", "arm64")]
 # Release asset -> (directory under RELEASES_DIR, media type).
 RELEASE_FILES = {name: ("desktop", "application/octet-stream") for name in DESKTOP_BINARIES}

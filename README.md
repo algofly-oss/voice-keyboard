@@ -48,7 +48,7 @@ installed client is listed under **Settings → Clients** with its status. Tap
 the one that should type; only that active client receives your dictation.
 
 ```bash
-voice-keyboard status   # connected? selected to type?  Also: logs, stop, start, uninstall
+vkeyboard status   # connected? selected to type?  Also: logs, stop, start, uninstall
 ```
 
 On macOS, allow it under **Privacy & Security → Accessibility** when prompted.

@@ -1,6 +1,6 @@
 # Desktop client
 
-`voice-keyboard` is one self-contained program (about 6 MB) that types dictated
+`vkeyboard` is one self-contained program (about 6 MB) that types dictated
 text into the focused window. It needs no runtime (such as Python or .NET),
 packages, or administrator rights.
 
@@ -28,12 +28,12 @@ Running the command again upgrades the client in place.
 ## Use
 
 ```text
-voice-keyboard status      running? connected? selected to type? permission problems?
-voice-keyboard logs        recent log lines, then follow live (-n 100, --no-follow)
-voice-keyboard stop        stop, and stay off after restarts
-voice-keyboard start       start in the background, and at every login
-voice-keyboard type-test   type a test string after 3 seconds
-voice-keyboard uninstall   remove settings and the login item
+vkeyboard status      running? connected? selected to type? permission problems?
+vkeyboard logs        recent log lines, then follow live (-n 100, --no-follow)
+vkeyboard stop        stop, and stay off after restarts
+vkeyboard start       start in the background, and at every login
+vkeyboard type-test   type a test string after 3 seconds
+vkeyboard uninstall   remove settings and the login item
 ```
 
 `start` and `stop` return immediately; the client itself runs detached from
@@ -45,12 +45,12 @@ retried with back-off.
 Each client appears in the web UI under **Settings → Clients** with its
 name, OS/CPU, and version. Only the active one types, and `status` shows
 whether this client is it. Logs roll over at 1 MB and keep three files
-(`voice-keyboard.log`, `.1`, `.2`) in the config directory shown by `status`.
+(`vkeyboard.log`, `.1`, `.2`) in the config directory shown by `status`.
 
 **Platform notes**
 
 - **macOS:** the first start opens the Accessibility prompt. Allow
-  `voice-keyboard` there; typing begins as soon as it is allowed, with no
+  `vkeyboard` there; typing begins as soon as it is allowed, with no
   restart. The binary is ad-hoc signed, so after an upgrade macOS may ask
   again.
 - **Linux on Wayland:** XTest only reaches X11 (XWayland) apps. To type into
@@ -58,8 +58,8 @@ whether this client is it. Logs roll over at 1 MB and keep three files
   these commands):
 
   ```bash
-  echo 'KERNEL=="uinput", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/60-voice-keyboard.rules
-  echo uinput | sudo tee /etc/modules-load.d/voice-keyboard.conf
+  echo 'KERNEL=="uinput", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/60-vkeyboard.rules
+  echo uinput | sudo tee /etc/modules-load.d/vkeyboard.conf
   sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --name-match=uinput
   ```
 
@@ -74,9 +74,9 @@ The only other dependency is [coder/websocket](https://github.com/coder/websocke
 
 ```bash
 cd desktop
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o voice-keyboard .
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o vkeyboard .
 # Windows: add -H windowsgui so the login item has no console window
 ```
 
 `tools/release.sh <version>` builds all six and attaches them to the GitHub
-release, which the backend mirrors and serves at `/client/voice-keyboard-<os>-<arch>`.
+release, which the backend mirrors and serves at `/client/vkeyboard-<os>-<arch>`.

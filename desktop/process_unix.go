@@ -14,7 +14,7 @@ func processAlive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 
 func stopProcess(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) }
 
-// startDetached launches `voice-keyboard run` in its own session so it
+// startDetached launches `vkeyboard run` in its own session so it
 // outlives the terminal that started it.
 func startDetached() error {
 	exe, err := os.Executable()
