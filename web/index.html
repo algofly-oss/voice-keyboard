@@ -107,6 +107,7 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
   opacity:0;pointer-events:none;transform:translateY(-4px);transition:opacity .2s,transform .2s var(--ease),background .15s}
 .discard svg.i{width:16px;height:16px}
 .recording .discard{opacity:1;pointer-events:auto;transform:none}
+.live-dictation .discard{display:none}  /* live text is already typed; there is nothing to discard */
 .discard:hover{background:var(--surface)}
 
 .keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
@@ -502,7 +503,9 @@ function setState(next){
   app.classList.toggle('busy',next==='connecting'||next==='finishing');
   mic.setAttribute('aria-pressed',active);
   mic.setAttribute('aria-label',next==='recording'?'Stop dictation':next==='remote'?'Stop the dictation on the other device':next==='idle'?'Start dictation':'Working');
-  $('#discard').tabIndex=active?0:-1;$('#discard').setAttribute('aria-hidden',!active);
+  const liveNow=next==='recording'?live:next==='remote'?!!remote?.live:false;
+  app.classList.toggle('live-dictation',liveNow);
+  $('#discard').tabIndex=active&&!liveNow?0:-1;$('#discard').setAttribute('aria-hidden',!active||liveNow);
   if(next==='idle'){resetWave();clearCaption()}
 }
 
@@ -730,7 +733,7 @@ function reconnectEvents(){const e=events;events=null;e?.close();connectEvents()
 function sendEvent(type){if(events?.readyState===1)events.send(JSON.stringify({type}))}
 function enterRemote(m){if(state!=='idle'&&state!=='remote')return;
   if(!remote)caption(m.text||'',true);
-  remote={level:0,startedAt:performance.now()-(m.elapsed||0)*1000};setState('remote');say('Dictating on another device');drawRemote()}
+  remote={level:0,live:!!m.live,startedAt:performance.now()-(m.elapsed||0)*1000};setState('remote');say('Dictating on another device');drawRemote()}
 function exitRemote(final){remote=null;cancelAnimationFrame(frame);if(state!=='remote')return;setState('idle');
   say(final?'Dictation finished on another device':'Tap the microphone to dictate');if(final)watchTyping()}
 function drawRemote(){if(state!=='remote'||!remote)return;remote.level*=.9;render(remote.level,remote.startedAt);frame=requestAnimationFrame(drawRemote)}
