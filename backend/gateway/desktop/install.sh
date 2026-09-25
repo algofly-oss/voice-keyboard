@@ -33,8 +33,22 @@ mkdir -p "$bin_dir"
 echo "Downloading voice-keyboard for $os/$arch..."
 curl -fsSL "$SERVER/client/voice-keyboard-$os-$arch" -o "$bin.download"
 chmod +x "$bin.download"
-[ -x "$bin" ] && "$bin" stop >/dev/null 2>&1 || true   # upgrading: stop the old one first
-mv "$bin.download" "$bin"
+
+# Remove any previous installation before installing this one.
+if [ -f "$bin" ] && [ "$(head -c 2 "$bin")" != "#!" ]; then
+  "$bin" stop >/dev/null 2>&1 || true            # earlier release of this client
+fi
+legacy="${XDG_DATA_HOME:-$HOME/.local/share}/voice-keyboard"
+# Only a Python interpreter running the old client (not e.g. an editor viewing it).
+legacy_process='^[^ ]*python[0-9.]* [^ ]*voice_keyboard_client\.py'
+if [ -d "$legacy/venv" ] || pgrep -f "$legacy_process" >/dev/null 2>&1; then
+  echo "Removing the previous Python-based client..."
+  pkill -f "$legacy_process" 2>/dev/null || true
+  rm -rf "$legacy"
+  # On macOS it kept its settings in ~/.config; this client uses Application Support.
+  if [ "$os" = darwin ]; then rm -rf "$HOME/.config/voice-keyboard"; fi
+fi
+mv "$bin.download" "$bin"   # replaces the old launcher script, if any
 
 "$bin" enroll --server "$SERVER" --token "$TOKEN"
 "$bin" start

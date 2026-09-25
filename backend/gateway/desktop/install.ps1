@@ -29,7 +29,15 @@ function Invoke-VK([string[]]$Arguments) {
   if ($p.ExitCode -ne 0) { throw "voice-keyboard $($Arguments[0]) failed" }
 }
 
-if (Test-Path $exe) { try { Invoke-VK @("stop") } catch {} }   # upgrading
+# Remove any previous installation before installing this one.
+if (Test-Path $exe) { try { Invoke-VK @("stop") } catch {} }   # earlier release of this client
+$legacy = @(Get-CimInstance Win32_Process -Filter "Name LIKE 'python%' OR Name LIKE 'py.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -like "*voice_keyboard_client.py*" })
+if ($legacy.Count -gt 0 -or (Test-Path (Join-Path $root "venv"))) {
+  Write-Host "Removing the previous Python-based client..."
+  $legacy | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Remove-Item -Recurse -Force (Join-Path $root "venv"), (Join-Path $root "voice_keyboard_client.py") -ErrorAction SilentlyContinue
+}
 Write-Host "Downloading voice-keyboard for windows/$arch..."
 Invoke-WebRequest "$Server/client/voice-keyboard-windows-$arch.exe" -OutFile "$exe.download" -UseBasicParsing
 Move-Item -Force "$exe.download" $exe

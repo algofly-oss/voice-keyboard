@@ -48,29 +48,22 @@ voice-keyboard status   # also: stop, start, uninstall
 On macOS, allow it under Privacy & Security → Accessibility when prompted.
 Details are in [desktop/README.md](desktop/README.md).
 
-### Mobile — `/downloads`
+### Android — `/downloads`
 
 On the phone, log in to the web app and open `https://your-host/downloads`.
 
-<img src="docs/screenshots/downloads.png" alt="Mobile downloads page" width="280">
+<img src="docs/screenshots/downloads.png" alt="Downloads page" width="280">
 
-1. Install the app.
-   - **Android:** tap **Download APK** and allow the one-time "install unknown
-     apps" prompt.
-   - **iPhone/iPad:** tap **Register this iPhone** and install the profile it
-     downloads, then tap **Install on this iPhone**. This signed build lasts a
-     year and is re-signed automatically, so you just tap Install again when
-     the date changes. It requires an Apple Developer account and one-time
-     setup; see [mobile/ios/README.md](mobile/ios/README.md). Without an
-     account, a SideStore option is available (7-day refresh).
+1. Tap **Download APK** and allow the one-time "install unknown apps" prompt.
 2. Tap **Pair this phone**. The app opens and pairs itself with the server.
-3. Enable the keyboard in system settings. On iOS, also turn on **Allow Full
-   Access**.
+3. Enable the keyboard in system settings and allow the microphone.
+
+On an iPhone or iPad, use the web app itself, or the ESP32 Bluetooth keyboard
+below.
 
 Builds are published as GitHub Releases, not stored in git. Set `GITHUB_REPO`
 and `GITHUB_TOKEN` in `backend/.env`; the server then downloads the newest
-release on start-up and every hour and serves it at `/downloads`. See
-[mobile/README.md](mobile/README.md).
+release on start-up and every hour. See [mobile/README.md](mobile/README.md).
 
 ## 2. Hardware (ESP32)
 
@@ -87,7 +80,7 @@ wiring, libraries, board settings, flashing, troubleshooting — is in
 | `docker-compose.yml` | One-command backend (web UI + API on port 8271) |
 | `backend/` | Dockerfile, FastAPI gateway, desktop installers |
 | `desktop/` | Desktop client (Go; macOS, Linux, Windows) |
-| `mobile/` | Android and iOS client notes; `releases/` for published builds |
+| `mobile/` | Android keyboard (Kotlin) |
 | `esp32/` | Firmware and the web UI source shared with the backend |
 | `tools/` | Build and code-generation scripts |
 | `docs/` | Screenshots |

@@ -1,48 +1,38 @@
-# Mobile keyboards
+# Android keyboard
 
-Native keyboards for Android and iOS. They type dictated text into any app on
-the phone itself. (To type on a computer from the phone, use the web app.)
-
-| | Android | iOS / iPadOS |
-| --- | --- | --- |
-| Source | [android/](android/README.md) — Kotlin `InputMethodService` | [ios/](ios/README.md) — Swift app + keyboard extension |
-| Records audio in | the keyboard | the containing app (iOS keyboards cannot use the mic) |
-| Distribution | self-signed APK from `/downloads` | signed Ad Hoc build from `/downloads` (1 year, auto re-signed), or unsigned `.ipa` via SideStore |
+A native Android keyboard (`InputMethodService`, Kotlin) that records and
+types dictated text into any app on the phone. To type on a computer from
+the phone, use the web app instead. Source and build instructions are in
+[android/](android/README.md).
 
 ## Pairing
 
-Both apps register the `voicekeyboard://` URL scheme. On a phone logged in to
-the web app, `/downloads` shows **Pair this phone**. That opens `voicekeyboard://pair?server=…&token=…`. The app
-exchanges the install token (the same one the desktop command uses) at `POST /api/pair` for a long-lived device credential.
-Both apps also accept a server URL and pairing code typed in by hand.
+The app registers the `voicekeyboard://` URL scheme. On a phone logged in to
+the web app, `/downloads` shows **Pair this phone**, which opens
+`voicekeyboard://pair?server=…&token=…`. The app exchanges the install token
+(the same one the desktop command uses) at `POST /api/pair` for a long-lived
+device credential. A server URL and pairing code can also be typed in by hand.
 
 ## Protocol
 
-The keyboards stream 16 kHz mono PCM to `wss://host/v1/stream?token=<credential>`
-and insert each `segment` as it arrives. Each device uses its own room,
+The keyboard streams 16 kHz mono PCM to `wss://host/v1/stream?token=<credential>`
+and inserts each `segment` as it arrives. Each device uses its own room,
 `mobile-<client>`, so phone dictation is not also typed on paired computers.
 
 ## Publishing
 
-Builds live in GitHub Releases (tags `voice-keyboard-v*`), not in git.
+Builds live in GitHub Releases (tags `voice-keyboard-v*`), not in git:
 
 ```bash
-tools/release.sh 1.0.0   # build + sign the APK, tag, create the release
+tools/release.sh 1.0.0   # builds the desktop binaries and signed APK, tags, creates the release
 ```
 
-The tag starts the "Voice Keyboard iOS" workflow. It builds the unsigned `.ipa` on a
-GitHub macOS runner and attaches it to the same release, usually within about
-10 minutes.
-
-The backend mirrors the newest release into its data volume
-(`/data/releases`). It checks on start-up and every `RELEASE_SYNC_SECONDS`
-(default 1 hour), and `/downloads` serves the files from there. Phones never
-talk to GitHub, which matters because release assets of a private repository
-need a token. Configure it in `backend/.env`:
+The backend mirrors the newest release into its data volume (`/data/releases`)
+on start-up and every `RELEASE_SYNC_SECONDS` (default one hour), and
+`/downloads` serves it from there. Phones never talk to GitHub, which matters
+because release assets of a private repository need a token:
 
 ```bash
 GITHUB_REPO=owner/repo
 GITHUB_TOKEN=github_pat_...   # fine-grained, read-only "Contents" on that repo
 ```
-
-Set `IOS_DOWNLOAD_URL` if you also distribute through TestFlight.

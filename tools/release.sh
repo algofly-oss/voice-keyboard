@@ -1,8 +1,7 @@
 #!/bin/sh
 # Publishes a release: builds the desktop client for macOS/Linux/Windows
 # (x86-64 and ARM64) and the signed Android APK locally, tags the current
-# commit, and creates the GitHub release with them attached. The tag starts the
-# iOS workflow, which adds VoiceKeyboard.ipa to the same release.
+# commit, and creates the GitHub release with them attached.
 # Usage: tools/release.sh 1.0.0
 set -eu
 version=${1:?usage: $0 <version, e.g. 1.0.0>}
@@ -28,5 +27,5 @@ git tag -a "$tag" -m "Voice Keyboard $version"
 # (e.g. ~/.netrc) that lacks the scope GitHub requires for workflow files.
 git push -q "https://x-access-token:$(gh auth token)@github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner).git" "$tag"
 gh release create "$tag" "$out"/* --verify-tag --title "Voice Keyboard $version" \
-  --notes "Desktop: voice-keyboard-<os>-<arch> (installed by the command in Settings → Computers). Android: VoiceKeyboard.apk. iOS: VoiceKeyboard.ipa is attached by GitHub Actions when its build finishes (unsigned; install with SideStore/AltStore)."
-echo "Released $tag. The backend picks it up within RELEASE_SYNC_SECONDS (or on restart). Watch the iOS build with: gh run watch \$(gh run list --workflow voice-keyboard-ios.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+  --notes "Desktop: voice-keyboard-<os>-<arch> (installed by the command in Settings → Computers). Android: VoiceKeyboard.apk."
+echo "Released $tag. The backend picks it up within RELEASE_SYNC_SECONDS (or on restart)."
