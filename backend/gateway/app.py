@@ -885,7 +885,7 @@ async def stream(ws: WebSocket):
         start = json.loads(await ws.receive_text())
     except (WebSocketDisconnect, ValueError):
         return
-    model = start.get("model") or DEFAULT_MODEL
+    model = DEFAULT_MODEL  # exactly one model is loaded; requests cannot load another
     language = start.get("language") or ""
     user_prompt = start.get("prompt") or ""
     owner = str(start.get("client") or id(ws))
@@ -981,10 +981,25 @@ async def passthrough(path: str, request: Request):
     """OpenAI-compatible endpoints (e.g. /v1/audio/transcriptions) of the Whisper server."""
     if not request_user(request):
         raise HTTPException(401, "Login or API key required")
-    headers = {"content-type": request.headers.get("content-type", "")} | whisper_headers()
-    upstream = whisper.build_request(
-        request.method, f"/v1/{path}", params=request.query_params, headers=headers, content=request.stream()
-    )
+    if request.method == "POST" and path in ("audio/transcriptions", "audio/translations"):
+        # Whisper would load any model named in the request and keep it in GPU
+        # memory for good; always use the configured one, so only one is loaded.
+        form = await request.form()
+        data: dict[str, list[str]] = {}
+        files = []
+        for key, value in form.multi_items():
+            if hasattr(value, "read"):
+                files.append((key, (value.filename, await value.read(), value.content_type)))
+            elif key != "model":
+                data.setdefault(key, []).append(value)
+        data["model"] = [DEFAULT_MODEL]
+        upstream = whisper.build_request("POST", f"/v1/{path}", params=request.query_params,
+                                         data=data, files=files, headers=whisper_headers())
+    else:
+        headers = {"content-type": request.headers.get("content-type", "")} | whisper_headers()
+        upstream = whisper.build_request(
+            request.method, f"/v1/{path}", params=request.query_params, headers=headers, content=request.stream()
+        )
     response = await whisper.send(upstream, stream=True)
     return StreamingResponse(
         response.aiter_raw(),
