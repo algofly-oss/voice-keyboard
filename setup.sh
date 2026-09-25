@@ -41,7 +41,7 @@ if [ ! -f .env ]; then
   names="localhost"
   [ -n "$host" ] && names="$host, $names"
   [ -n "$ip" ] && names="$ip, $names"
-  https_port=443; for p in 443 8443 9443; do if port_free "$p"; then https_port=$p; break; fi; done
+  https_port=443; for p in 443 8272 9443; do if port_free "$p"; then https_port=$p; break; fi; done
   http_port=80; for p in 80 8271 8080; do if port_free "$p"; then http_port=$p; break; fi; done
   set_env .env COMPOSE_PROFILES "$profile"
   set_env .env VK_DOMAIN "$names"

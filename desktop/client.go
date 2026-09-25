@@ -113,7 +113,11 @@ func serve(ctx context.Context, cfg config) error {
 	delay := time.Second
 	for {
 		updateState(state{PID: pidSelf(), Since: time.Now()})
+		began := time.Now()
 		err := safeSession(ctx, cfg, kb)
+		if connectedAt.After(began) {
+			delay = time.Second // it was connected: a drop is retried at once, not after the old back-off
+		}
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -129,9 +133,12 @@ func serve(ctx context.Context, cfg config) error {
 			return nil
 		case <-time.After(delay):
 		}
-		delay = min(delay*2, 30*time.Second)
+		delay = min(delay*2, 10*time.Second)
 	}
 }
+
+// connectedAt is when the last session finished its handshake.
+var connectedAt time.Time
 
 // waitForKeyboard retries until typing is possible; at login the display
 // server may not be ready when the login item starts.
@@ -177,6 +184,7 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 		}
 	}
 	selected := ready.Selected
+	connectedAt = time.Now()
 	log.Printf("connected to %s (%s)", cfg.Server, selectedText(selected))
 	updateState(state{PID: pidSelf(), Connected: true, Since: time.Now(), Selected: &selected})
 

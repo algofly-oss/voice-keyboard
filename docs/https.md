@@ -65,7 +65,7 @@ Use this when people reach the server by IP address, host name or `.local` name
 inside your network.
 
 1. Run `./setup.sh`. It fills in the machine's IP address and host name and
-   chooses a free port (443, then 8271, then 8443).
+   chooses free ports (HTTPS 443, then 8272; HTTP 80, then 8271).
 2. Add any other names you use to `VK_DOMAIN`, such as `myserver.local` or a
    name from your router's DNS. Then run `docker compose up -d`.
 3. On **each device**, trust the local CA once, and restart the browser:

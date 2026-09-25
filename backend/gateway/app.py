@@ -707,6 +707,8 @@ async def keyboard(ws: WebSocket):
         await ws.send_json({"type": "ready", "device": device["id"], "client": device["name"],
                             "credential": credential, "selected": room.selected == device["id"]})
         await announce_selection(room, skip=ws)
+        if room.selected == device["id"]:
+            await flush_pending(room, ws)
         while True:
             message = await ws.receive()
             if message.get("type") == "websocket.disconnect":
@@ -733,6 +735,7 @@ class Room:
         self.watchers: set[WebSocket] = set()
         self.devices: dict[int, WebSocket] = {}  # device id -> connected desktop client
         self.selected: int | None = None          # the device that types
+        self.pending: list[tuple[float, dict]] = []  # typed while the selected device was offline
         self.active: dict | None = None  # owner, started, live, ws, joiner
 
     def snapshot(self) -> dict:
@@ -802,15 +805,31 @@ def client_id_from_credential(token: str) -> str | None:
         return None
 
 
+PENDING_SECONDS = 60  # text for an offline client is kept this long, then dropped
+
+
 async def send_keyboard(room: Room, message: dict):
-    """Only the account's selected computer types."""
+    """Only the account's selected computer types. If it is briefly offline
+    (network drop, restart), the text waits and is typed when it reconnects."""
     client = room.devices.get(room.selected)
-    if client is None:
-        return
-    try:
-        await client.send_json(message)
-    except Exception:
-        room.devices.pop(room.selected, None)
+    if client is not None:
+        try:
+            await client.send_json(message)
+            return
+        except Exception:
+            room.devices.pop(room.selected, None)
+    if room.selected is not None:
+        room.pending.append((time.monotonic(), message))
+        del room.pending[:-500]
+
+
+async def flush_pending(room: Room, ws: WebSocket):
+    fresh = [m for t, m in room.pending if time.monotonic() - t < PENDING_SECONDS]
+    room.pending.clear()
+    if fresh:
+        log.info("Delivering %d queued messages to a reconnected client", len(fresh))
+    for message in fresh:
+        await ws.send_json(message)
 
 
 @app.websocket("/v1/events")

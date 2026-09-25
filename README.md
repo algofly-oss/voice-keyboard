@@ -18,7 +18,7 @@ On the first run `setup.sh`:
 - creates `.env` (compose settings) and `backend/.env` (app settings) with a
   random admin password and session secret,
 - picks `gpu` or `cpu`, fills in this machine's names and IP address for the
-  HTTPS certificate, and chooses a free port (443, else 8271, else 8443),
+  HTTPS certificate, and chooses free ports (HTTPS 443, else 8272; HTTP 80, else 8271),
 - starts everything with `docker compose up -d --build`, waits until it is
   ready, and prints the address, the admin password, and how to trust the
   certificate on your devices.
