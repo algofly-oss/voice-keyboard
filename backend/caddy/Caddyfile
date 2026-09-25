@@ -1,18 +1,18 @@
-# HTTPS in front of the gateway, started by `docker compose up`. There is no
-# plain-HTTP port: HTTP requests arriving on the HTTPS port are redirected.
+# Front door of the app, started by `docker compose up`. See docs/https.md.
+#   VK_PROTOCOL     https (default): the app on HTTPS_PORT; HTTP_PORT redirects
+#                   to it and serves the local CA for devices to trust.
+#                   http: the app on HTTP_PORT only, for use behind a tunnel or
+#                   proxy that adds HTTPS itself (browsers need HTTPS for the mic).
+#                   both: the app on HTTPS_PORT and, without redirect, on HTTP_PORT.
 #   VK_DOMAIN       names this server is reached by, comma-separated
-#                   (e.g. "voice.example.com" or "192.168.1.20, localhost")
-#   VK_DEFAULT_SNI  name whose certificate is used when a client sends none
-#                   (connections by IP address); defaults to localhost
-#   VK_TLS          "internal" (default): certificates from Caddy's own local CA,
-#                   trusted once per device (/ca.crt, /client/trust-ca.*).
-#                   An email address: Let's Encrypt for a public domain
-#                   (needs HTTPS_PORT=443 reachable from the internet).
+#   VK_DEFAULT_SNI  certificate for clients that send no name (connections by IP)
+#   VK_TLS          internal (local CA, default) or an email address (Let's Encrypt)
 {
 	skip_install_trust
 	auto_https disable_redirects
 	default_sni {$VK_DEFAULT_SNI:localhost}
-	servers {
+	servers :443 {
+		# Plain HTTP sent to the HTTPS port is redirected, not refused.
 		listener_wrappers {
 			http_redirect
 			tls
@@ -20,9 +20,7 @@
 	}
 }
 
-{$VK_DOMAIN:localhost} {
-	tls {$VK_TLS:internal}
-	encode gzip
+(ca) {
 	# The local CA's root certificate, for devices to trust.
 	handle /ca.crt {
 		root * /data/caddy/pki/authorities/local
@@ -31,7 +29,13 @@
 		header Content-Disposition "attachment; filename=\"vkeyboard-ca.crt\""
 		file_server
 	}
+}
+
+(app) {
+	encode gzip
 	handle {
 		reverse_proxy gateway:8000
 	}
 }
+
+import /etc/caddy/{$VK_PROTOCOL:https}.caddy

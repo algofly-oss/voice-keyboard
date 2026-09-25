@@ -1,0 +1,5 @@
+# VK_PROTOCOL=http: the app over plain HTTP only, for use behind a tunnel or
+# proxy that provides HTTPS (e.g. Cloudflare Tunnel). No certificates.
+http:// {
+	import app
+}

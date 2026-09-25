@@ -36,8 +36,10 @@ in `backend/.env` (uses Whisper large-v3). To switch between GPU and CPU, set
 Browsers only allow the microphone over HTTPS with a certificate they trust.
 Voice Keyboard handles this for you:
 
-- The web UI is served **only over HTTPS, on a single port** (`HTTPS_PORT`),
-  by a bundled Caddy proxy. Plain `http://` requests to it are redirected.
+- A bundled Caddy proxy serves the web UI over **HTTPS** (`HTTPS_PORT`) and
+  redirects plain HTTP (`HTTP_PORT`) to it. `VK_PROTOCOL=both` also serves the app
+  over plain HTTP, for example for a Cloudflare tunnel; `VK_PROTOCOL=http` serves
+  it only over plain HTTP, behind a proxy that adds HTTPS.
 - **Certificates are automatic.** On a local network, Caddy signs them with its
   own certificate authority, and you trust that authority once per device
   (one command; `setup.sh` prints it). For a public domain with port 443 open,

@@ -5,9 +5,11 @@ name: voice-keyboard
 #   cpu  CPU only; works on machines without an NVIDIA GPU, or by choice
 # When switching, run `docker compose down` first (both use the same port).
 #
-# The app is served only over HTTPS: the `https` service (Caddy) listens on
-# HTTPS_PORT with an automatic certificate (see backend/caddy/Caddyfile) and
-# redirects plain HTTP on that port. The gateway is not published at all.
+# The `https` service (Caddy) is the only way in; the gateway is not published.
+# VK_PROTOCOL=https (default): the app on HTTPS_PORT with automatic certificates,
+# HTTP_PORT redirects to it. VK_PROTOCOL=http: the app on HTTP_PORT only, behind
+# a tunnel/proxy that adds HTTPS. VK_PROTOCOL=both: the app on both ports.
+# See docs/https.md.
 
 x-transcription: &transcription
   build:
@@ -26,6 +28,7 @@ x-transcription: &transcription
     WHISPER__NUM_WORKERS: "1"
     ENABLE_UI: "false"
     VK_TLS: "${VK_TLS:-internal}"  # tells the web UI whether install commands must trust a local CA
+    VK_PROTOCOL: "${VK_PROTOCOL:-https}"
     LOG_LEVEL: "info"
   volumes:
     - ./backend/volumes/huggingface:/root/.cache/huggingface
@@ -63,11 +66,17 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_BIND:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-80}:80"
     environment:
       VK_DOMAIN: "${VK_DOMAIN:-localhost}"
       VK_TLS: "${VK_TLS:-internal}"
+      VK_PROTOCOL: "${VK_PROTOCOL:-https}"
+      VK_HTTPS_PORT: "${HTTPS_PORT:-443}"
       VK_DEFAULT_SNI: "${VK_DEFAULT_SNI:-localhost}"
     volumes:
       - ./backend/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./backend/caddy/https.caddy:/etc/caddy/https.caddy:ro
+      - ./backend/caddy/http.caddy:/etc/caddy/http.caddy:ro
+      - ./backend/caddy/both.caddy:/etc/caddy/both.caddy:ro
       - ./backend/volumes/caddy:/data  # certificates and the local CA; keep it

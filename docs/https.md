@@ -13,10 +13,20 @@ browser ──HTTPS──▶ Caddy (container "https") ──HTTP, inside Docker
                    the only published port: HTTPS_PORT
 ```
 
-- **One port.** Only `HTTPS_PORT` (from `.env`) is published on the host.
-  The gateway and Whisper are reachable only inside Docker's network.
-- **HTTP is redirected.** A plain `http://` request to that port gets a
-  redirect to the same address over `https://`.
+- **Caddy is the only way in.** It publishes `HTTPS_PORT` and `HTTP_PORT` (from
+  `.env`). The gateway and Whisper are reachable only inside Docker's network.
+- **`VK_PROTOCOL` decides what each port does:**
+
+  | `VK_PROTOCOL` | `HTTPS_PORT` | `HTTP_PORT` | Use it for |
+  | --- | --- | --- | --- |
+  | `https` (default) | the app | redirects to HTTPS; serves `/ca.crt` | LAN, public domain, port forwards |
+  | `both` | the app | the app, no redirect | HTTPS on the LAN **and** plain HTTP for a Cloudflare tunnel |
+  | `http` | not used | the app | only behind a tunnel/proxy that adds HTTPS |
+
+  Plain HTTP is only useful behind something that adds HTTPS (such as Cloudflare):
+  browsers block the microphone on plain `http://` except at `localhost`.
+  To keep a port off the network, set `HTTPS_BIND=127.0.0.1` or `HTTP_BIND=127.0.0.1`.
+- **Plain HTTP to the HTTPS port is redirected** to `https://`.
 - **Certificates are automatic.** Caddy issues and renews a certificate for
   every name listed in `VK_DOMAIN`, from one of two sources:
 
@@ -38,7 +48,9 @@ COMPOSE_PROFILES=gpu           # or cpu
 VK_DOMAIN=192.168.1.20, myserver, localhost   # every name/IP clients use, comma-separated
 VK_DEFAULT_SNI=192.168.1.20    # certificate for clients that connect by IP (they send no name)
 VK_TLS=internal                # or your email address for Let's Encrypt
-HTTPS_PORT=443                 # the only port published on the host
+VK_PROTOCOL=https              # https, both or http (see the table above)
+HTTPS_PORT=443
+HTTP_PORT=80
 ```
 
 After changing any of these, apply them with:
@@ -108,7 +120,14 @@ different port. Use scenario 3, 4 or 5 in those cases.
 Use this when the server isn't reachable from the internet and a
 `cloudflared` tunnel publishes it, for example as `voice.example.com`.
 Cloudflare presents its own trusted certificate to visitors, so no device needs
-any setup.
+any setup. The tunnel can reach the server in either of two ways.
+
+**Option A: plain HTTP (simplest).** Set `VK_PROTOCOL=both`, which keeps HTTPS on
+`HTTPS_PORT` for the LAN, or `VK_PROTOCOL=http`. Then point the tunnel's public
+hostname at **HTTP** `<server-lan-ip>:<HTTP_PORT>`, for example
+`http://192.168.1.20:8271`. Nothing else is needed.
+
+**Option B: HTTPS to the server.** Keep `VK_PROTOCOL=https`:
 
 1. Add the public name to `VK_DOMAIN` in `.env`, for example
    `VK_DOMAIN=192.168.1.20, voice.example.com`, and run `docker compose up -d`.
@@ -129,9 +148,9 @@ any setup.
          noTLSVerify: true
    ```
 
-The service must be **HTTPS**, not HTTP. Sending HTTP to the port only returns
+With `VK_PROTOCOL=https`, the service must be **HTTPS**. Plain HTTP only returns
 the redirect to HTTPS, which the browser follows back through Cloudflare, and
-it loops (`ERR_TOO_MANY_REDIRECTS`).
+it loops (`ERR_TOO_MANY_REDIRECTS`). Use option A to send plain HTTP.
 
 ## Scenario 4: port forwarding (router, VPS, dynamic DNS)
 
@@ -184,7 +203,7 @@ should publish Voice Keyboard under its own domain and certificate.
 | --- | --- | --- |
 | `ERR_SSL_PROTOCOL_ERROR`, "sent an invalid response" | The name in the address isn't in `VK_DOMAIN` | Add it, run `docker compose up -d` |
 | "Not secure", `NET::ERR_CERT_AUTHORITY_INVALID` | This device doesn't trust the local CA | Trust it (scenario 1, step 3), restart the browser |
-| `ERR_TOO_MANY_REDIRECTS` | A tunnel or proxy sends plain HTTP to the HTTPS port | Configure it for HTTPS with verification off (scenario 3/5) |
+| `ERR_TOO_MANY_REDIRECTS` | A tunnel or proxy sends plain HTTP while `VK_PROTOCOL=https` | Use `VK_PROTOCOL=both` and point it at `HTTP_PORT`, or configure it for HTTPS with verification off (scenario 3/5) |
 | Microphone button shows "needs HTTPS" | Page opened over HTTP, or the certificate isn't trusted | Open the `https://` address; trust the CA |
 | Let's Encrypt certificate never arrives | Port 443 isn't reachable from the internet, or DNS points elsewhere | Check forwarding and DNS; see `docker compose logs https` |
 | Worked before, "Not secure" after moving the server | New local CA (the `backend/volumes/caddy` folder wasn't kept) | Restore the folder, or trust the new CA on each device |

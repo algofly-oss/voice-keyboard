@@ -1,0 +1,13 @@
+# VK_PROTOCOL=both: the app on HTTPS_PORT (local CA or Let's Encrypt) and on
+# HTTP_PORT without a redirect, e.g. HTTPS for the LAN and plain HTTP for a
+# tunnel (Cloudflare) that adds HTTPS itself.
+{$VK_DOMAIN:localhost} {
+	tls {$VK_TLS:internal}
+	import ca
+	import app
+}
+
+http:// {
+	import ca
+	import app
+}

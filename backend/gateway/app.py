@@ -516,7 +516,7 @@ async def backend_settings(request: Request):
             "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe",
             "pace": DEFAULT_PACE,
             # With Caddy's local CA, install commands trust it on first contact.
-            "localCa": os.environ.get("VK_TLS", "internal") == "internal"}
+            "localCa": os.environ.get("VK_PROTOCOL", "https") in ("https", "both") and os.environ.get("VK_TLS", "internal") == "internal"}
 
 
 @app.api_route("/api/enroll", methods=["GET", "POST"])

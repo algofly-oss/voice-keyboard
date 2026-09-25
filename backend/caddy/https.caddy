@@ -1,0 +1,17 @@
+# VK_PROTOCOL=https: the app over HTTPS; plain HTTP redirects to it.
+{$VK_DOMAIN:localhost} {
+	tls {$VK_TLS:internal}
+	import ca
+	import app
+}
+
+http:// {
+	import ca
+	@trust path /client/trust-ca.sh /client/trust-ca.ps1
+	handle @trust {
+		reverse_proxy gateway:8000
+	}
+	handle {
+		redir https://{host}:{$VK_HTTPS_PORT:443}{uri}
+	}
+}

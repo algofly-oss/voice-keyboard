@@ -41,11 +41,13 @@ if [ ! -f .env ]; then
   names="localhost"
   [ -n "$host" ] && names="$host, $names"
   [ -n "$ip" ] && names="$ip, $names"
-  https_port=443; for p in 443 8271 8443; do if port_free "$p"; then https_port=$p; break; fi; done
+  https_port=443; for p in 443 8443 9443; do if port_free "$p"; then https_port=$p; break; fi; done
+  http_port=80; for p in 80 8271 8080; do if port_free "$p"; then http_port=$p; break; fi; done
   set_env .env COMPOSE_PROFILES "$profile"
   set_env .env VK_DOMAIN "$names"
   set_env .env VK_DEFAULT_SNI "${ip:-localhost}"
   set_env .env HTTPS_PORT "$https_port"
+  set_env .env HTTP_PORT "$http_port"
   say "Created .env: Whisper on $profile; HTTPS for $names on port $https_port."
 fi
 
@@ -62,6 +64,10 @@ https_port=$(get_env .env HTTPS_PORT); https_port=${https_port:-443}
 server=$(get_env .env VK_DEFAULT_SNI); server=${server:-localhost}
 suffix() { [ "$1" = "$2" ] && echo "" || echo ":$1"; }
 https_url="https://$server$(suffix "$https_port" 443)"
+http_port=$(get_env .env HTTP_PORT); http_port=${http_port:-80}
+http_url="http://$server$(suffix "$http_port" 80)"
+protocol=$(get_env .env VK_PROTOCOL); protocol=${protocol:-https}
+check_url=$https_url; [ "$protocol" = http ] && check_url=$http_url
 
 say "Starting (the first start downloads the Whisper model, which can take several minutes)..."
 docker compose up -d --build
@@ -69,17 +75,21 @@ docker compose up -d --build
 printf 'Waiting for the server'
 ready=""
 for _ in $(seq 1 180); do
-  if curl -fsSk "$https_url/health" >/dev/null 2>&1; then ready=1; break; fi
+  if curl -fsSk "$check_url/health" >/dev/null 2>&1; then ready=1; break; fi
   printf '.'; sleep 5
 done
 say ""
 [ -n "$ready" ] || { say "Not ready after 15 minutes; check: docker compose logs -f"; exit 1; }
 
 say ""
-say "Voice Keyboard is running at $https_url"
+case "$protocol" in
+  http) say "Voice Keyboard is running at $http_url (plain HTTP: put a tunnel or proxy with HTTPS in front)" ;;
+  both) say "Voice Keyboard is running at $https_url and, without HTTPS, at $http_url" ;;
+  *) say "Voice Keyboard is running at $https_url" ;;
+esac
 [ -n "${password:-}" ] && say "Sign in as admin with password: $password   (change it in Settings → Account)"
 tls=$(get_env .env VK_TLS)
-if [ "${tls:-internal}" = internal ]; then
+if [ "${tls:-internal}" = internal ] && [ "$protocol" != http ]; then
   say ""
   say "Browsers allow the microphone only over HTTPS they trust. This server signs its"
   say "certificate with its own local CA; trust it once on each device you use"
