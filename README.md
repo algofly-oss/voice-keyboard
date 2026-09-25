@@ -15,7 +15,8 @@ To have speech in any language typed as English, set `WHISPER_VARIANT=translate`
 in `backend/.env` (uses Whisper large-v3).
 
 ```bash
-cp backend/.env.example backend/.env   # set WEB_PASSWORD and SESSION_SECRET
+cp .env.example .env                   # compose settings: GPU/CPU, HTTPS names and ports
+cp backend/.env.example backend/.env   # app settings: set WEB_PASSWORD and SESSION_SECRET
 docker compose up -d --build
 curl http://localhost:8271/health      # {"status":"ok","whisper":true} once the model is loaded
 ```
@@ -24,10 +25,27 @@ The first start downloads the Whisper model, which takes a few minutes.
 
 ## 2. Open the web UI
 
-Go to `http://localhost:8271/` and sign in as `admin` with `WEB_PASSWORD`. To
-use it from another device, put the backend behind HTTPS, for example with a
-reverse proxy or Cloudflare Tunnel; browsers only allow the microphone on
-HTTPS or `localhost`.
+Go to `https://localhost/` and sign in as `admin` with `WEB_PASSWORD`.
+
+HTTPS is on by default, because browsers only allow the microphone on HTTPS.
+The bundled Caddy proxy gets certificates automatically:
+
+- **On a LAN** (default, `VK_TLS=internal`): list the server's names or IP
+  addresses in `VK_DOMAIN` in `.env`. Caddy signs them with its own local CA.
+  Trust that CA once on each device, and the browser stops warning and allows
+  the microphone:
+  - macOS / Linux: `curl -fsSL http://<server>/client/trust-ca.sh | sh -s -- http://<server>`
+  - Windows (admin PowerShell): `curl.exe -o vk-ca.crt http://<server>/ca.crt; certutil -addstore -f Root vk-ca.crt`
+  - iPhone/iPad: open `http://<server>/ca.crt`, install the profile, then turn it
+    on in Settings → General → About → Certificate Trust Settings.
+  - Android: download `http://<server>/ca.crt`, then Settings → Security →
+    Install a certificate → CA certificate.
+- **Public domain**: set `VK_DOMAIN=voice.example.com` and `VK_TLS=you@example.com`.
+  Caddy then gets a Let's Encrypt certificate, which needs ports 80 and 443
+  reachable from the internet.
+
+Ports `HTTPS_PORT`/`HTTP_PORT` default to 443/80. The gateway's plain-HTTP port
+(8271) is published on `127.0.0.1` only unless `API_BIND` says otherwise.
 
 <img src="docs/screenshots/web-ui.png" alt="Voice Keyboard web UI" width="280">
 
@@ -71,6 +89,7 @@ wait their turn (`WHISPER_CONCURRENCY`, default 1).
 
 ## Security
 
-Use HTTPS outside your LAN and a long random `SESSION_SECRET`. If an install
+Use a long random `SESSION_SECRET`. Back up `backend/volumes/caddy`: it holds
+the local CA that your devices trust. If an install
 command leaks, click **New command** in Settings → Clients. Remove a lost
 client from the same list to revoke it.

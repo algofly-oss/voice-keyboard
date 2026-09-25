@@ -1,0 +1,40 @@
+# HTTPS in front of the gateway, started by `docker compose up`.
+#   VK_DOMAIN  names this server is reached by, comma-separated
+#              (e.g. "voice.example.com" or "192.168.1.20, localhost")
+#   VK_DEFAULT_SNI  name whose certificate is used when a client sends none
+#              (connections by IP address); defaults to localhost
+#   VK_TLS     "internal" (default): certificates from Caddy's own local CA;
+#              trust it once per device (http://<server>/ca.crt).
+#              An email address: Let's Encrypt for a public domain
+#              (ports 80 and 443 must be reachable from the internet).
+{
+	skip_install_trust
+	# The http:// block below serves /ca.crt before redirecting (to the right port).
+	auto_https disable_redirects
+	# Clients connecting by IP address send no server name; use this one's certificate.
+	default_sni {$VK_DEFAULT_SNI:localhost}
+}
+
+{$VK_DOMAIN:localhost} {
+	tls {$VK_TLS:internal}
+	encode gzip
+	reverse_proxy gateway:8000
+}
+
+# Plain HTTP only serves what a device needs before it trusts the local CA;
+# everything else redirects to HTTPS.
+http:// {
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=\"vkeyboard-ca.crt\""
+		file_server
+	}
+	handle /client/trust-ca.sh {
+		reverse_proxy gateway:8000
+	}
+	handle {
+		redir https://{host}:{$VK_HTTPS_PORT:443}{uri}
+	}
+}

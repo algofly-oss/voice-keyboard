@@ -625,6 +625,11 @@ async def install_sh():
     return FileResponse(CLIENT_DIR / "install.sh", media_type="text/plain")
 
 
+@app.get("/client/trust-ca.sh", include_in_schema=False)
+async def trust_ca_sh():
+    return FileResponse(CLIENT_DIR / "trust-ca.sh", media_type="text/plain")
+
+
 @app.get("/client/install.ps1", include_in_schema=False)
 async def install_ps1():
     return FileResponse(CLIENT_DIR / "install.ps1", media_type="text/plain")

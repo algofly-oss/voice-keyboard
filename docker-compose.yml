@@ -4,6 +4,11 @@ name: voice-keyboard
 #   gpu  NVIDIA GPU (default; needs the NVIDIA Container Toolkit)
 #   cpu  CPU only; works on machines without an NVIDIA GPU, or by choice
 # When switching, run `docker compose down` first (both use the same port).
+#
+# HTTPS is on by default: the `https` service (Caddy) serves the app on
+# HTTPS_PORT with an automatic certificate (see backend/caddy/Caddyfile).
+# The gateway's plain-HTTP port is only published on 127.0.0.1 unless
+# API_BIND says otherwise (e.g. 0.0.0.0 for a tunnel that connects over HTTP).
 
 x-transcription: &transcription
   build:
@@ -11,7 +16,10 @@ x-transcription: &transcription
     dockerfile: backend/Dockerfile
   restart: unless-stopped
   ports:
-    - "${API_PORT:-8271}:8000"
+    - "${API_BIND:-127.0.0.1}:${API_PORT:-8271}:8000"
+  networks:
+    default:
+      aliases: [gateway]  # the name Caddy proxies to, whichever profile runs
   env_file:
     - path: ./backend/.env
       required: false
@@ -52,3 +60,18 @@ services:
     environment:
       <<: *environment
       WHISPER_DEVICE: cpu
+
+  https:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTP_PORT:-80}:80"
+    environment:
+      VK_DOMAIN: "${VK_DOMAIN:-localhost}"
+      VK_TLS: "${VK_TLS:-internal}"
+      VK_DEFAULT_SNI: "${VK_DEFAULT_SNI:-localhost}"
+      VK_HTTPS_PORT: "${HTTPS_PORT:-443}"
+    volumes:
+      - ./backend/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./backend/volumes/caddy:/data  # certificates and the local CA; keep it

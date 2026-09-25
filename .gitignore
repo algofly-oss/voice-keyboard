@@ -4,3 +4,4 @@ backend/volumes/
 __pycache__/
 desktop/vkeyboard
 desktop/vkeyboard-*
+.env
