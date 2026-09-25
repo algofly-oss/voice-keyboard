@@ -33,45 +33,26 @@ in `backend/.env` (uses Whisper large-v3). To switch between GPU and CPU, set
 
 ## 2. HTTPS and the microphone
 
-Browsers only let a page use the microphone in a *secure context*: HTTPS with a
-certificate the browser trusts (or `localhost`). A plain `http://` address, or
-an HTTPS certificate the browser does not trust ("Not secure"), means no
-microphone. This repository takes care of that:
+Browsers only allow the microphone over HTTPS with a certificate they trust.
+Voice Keyboard handles this for you:
 
-- **Everything is served over HTTPS on a single port** (`HTTPS_PORT` in
-  `.env`). A bundled Caddy proxy terminates TLS; the app itself is not
-  published. Plain `http://` requests to that port are redirected to HTTPS.
-- **Certificates are automatic.**
-  - *Local network* (default, `VK_TLS=internal`): Caddy runs its own small
-    certificate authority and issues certificates for every name in
-    `VK_DOMAIN` (IP addresses, host names, `.local` names). Each device must
-    trust that authority once; after that the browser shows a normal
-    padlock and allows the microphone.
-  - *Public domain*: set `VK_DOMAIN=voice.example.com` and
-    `VK_TLS=you@example.com`, and Caddy gets a Let's Encrypt certificate and
-    renews it. This needs the domain to point at the server and port 443
-    reachable from the internet (`HTTPS_PORT=443`). No per-device step.
-- **Trusting the local authority on a device** (replace the address with your
-  server's; `setup.sh` prints these with the right address):
+- The web UI is served **only over HTTPS, on a single port** (`HTTPS_PORT`),
+  by a bundled Caddy proxy. Plain `http://` requests to it are redirected.
+- **Certificates are automatic.** On a local network, Caddy signs them with its
+  own certificate authority, and you trust that authority once per device
+  (one command; `setup.sh` prints it). For a public domain with port 443 open,
+  it uses Let's Encrypt and no device setup is needed.
+- Every name or IP address people use to reach the server must be listed in
+  `VK_DOMAIN` in `.env`.
 
-  | Device | How |
-  | --- | --- |
-  | macOS / Linux | `curl -fsSLk https://<server>/client/trust-ca.sh \| sh -s -- https://<server>` |
-  | Windows | `powershell -c "[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}; irm https://<server>/client/trust-ca.ps1 \| iex"` |
-  | iPhone / iPad | Open `https://<server>/ca.crt` in Safari (accept the warning once), install the profile, then turn it on in Settings → General → About → Certificate Trust Settings |
-  | Android | Download `https://<server>/ca.crt`, then Settings → Security → Install a certificate → CA certificate |
-
-  Restart the browser afterwards. The desktop client's install command
-  (Settings → Clients) performs this step by itself. The `-k` flag only
-  applies to downloading the certificate itself: nothing can be verified
-  before it is trusted, just like accepting an SSH host key the first time.
-  Everything after that is verified.
-- **Keep `backend/volumes/caddy`.** It holds the certificate authority your
-  devices trust; losing it means trusting a new one on every device.
-- **Behind a tunnel or another proxy** (e.g. Cloudflare Tunnel): point it at
-  `https://<server>:<HTTPS_PORT>` with certificate verification off (the tunnel
-  does not know the local authority), and add the public name to
-  `VK_DOMAIN`.
+**[docs/https.md](docs/https.md)** is the full guide:
+- local network only;
+- a public domain (Let's Encrypt);
+- Cloudflare Tunnel;
+- port forwarding (router, VPS, DuckDNS);
+- behind an existing reverse proxy (Traefik, nginx);
+- changing names and ports;
+- troubleshooting (`ERR_SSL_PROTOCOL_ERROR`, "Not secure", `ERR_TOO_MANY_REDIRECTS`).
 
 ## 3. Open the web UI
 
