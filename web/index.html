@@ -384,16 +384,6 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
             <label><input type="radio" name="afterText" value="space"><span><i data-i="space"></i>Space</span></label>
             <label><input type="radio" name="afterText" value="enter"><span><i data-i="enter"></i>Enter</span></label>
           </div></div>
-        <div class="field"><label for="f-max">Stop recording after</label>
-          <select id="f-max" name="maxSeconds"><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option>
-            <option value="600">10 minutes</option><option value="1800">30 minutes</option><option value="3600">1 hour</option></select></div>
-        <details><summary>Advanced<i data-i="chevron"></i></summary><div class="inner">
-          <div class="field"><label for="f-model">Model</label>
-            <input id="f-model" name="model" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-          <div class="field"><label for="f-prompt">Vocabulary</label>
-            <textarea id="f-prompt" name="prompt" rows="3" placeholder="Names, products or jargon, e.g. Kubernetes, PostgreSQL"></textarea>
-            <p class="hint">Helps Whisper spell uncommon words correctly.</p></div>
-        </div></details>
       </section>
 
       <section class="pane" id="pane-device" role="tabpanel" aria-labelledby="tab-device" hidden>
@@ -809,7 +799,7 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
   b.setAttribute('aria-pressed',show);b.querySelector('svg').innerHTML=ICONS[show?'eyeOff':'eye']}));
 
 
-async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}');cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}}
+async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const {maxSeconds,model,prompt,...saved}=JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}');/* no longer user settings: use the server's defaults */cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}}
 
 {
   saveBtn.addEventListener('click',()=>{
