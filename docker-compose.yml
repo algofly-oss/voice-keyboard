@@ -12,11 +12,8 @@ services:
       - path: ./backend/.env
         required: false
     environment:
-      WHISPER_MODEL: "${WHISPER_MODEL:-deepdml/faster-whisper-large-v3-turbo-ct2}"
       TRANSCRIPTION_PORT: "${TRANSCRIPTION_PORT:-8001}"
-      WHISPER__MODEL: "${WHISPER_MODEL:-deepdml/faster-whisper-large-v3-turbo-ct2}"
       STT_MODEL_TTL: "-1"
-      WHISPER__COMPUTE_TYPE: "${WHISPER_COMPUTE_TYPE:-int8_float16}"
       WHISPER__INFERENCE_DEVICE: "cuda"
       WHISPER__NUM_WORKERS: "1"
       WHISPER__CPU_THREADS: "4"

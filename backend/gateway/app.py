@@ -38,6 +38,8 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Stream
 
 WHISPER_URL = os.environ.get("WHISPER_URL", "http://127.0.0.1:8001").rstrip("/")
 DEFAULT_MODEL = os.environ.get("WHISPER_MODEL", "deepdml/faster-whisper-large-v3-turbo-ct2")
+# "translate" types an English translation of any spoken language (see start.sh).
+TRANSLATE = os.environ.get("WHISPER_VARIANT", "transcribe") == "translate"
 API_KEY = os.environ.get("API_KEY") or None
 AUTH_FILE = Path(os.environ.get("AUTH_FILE", "/data/auth.json"))
 
@@ -96,6 +98,9 @@ class Policy(NamedTuple):
 
 # Live typing wants text quickly; batch mode gives Whisper longer context.
 LIVE = Policy(pause_ms=400, min_ms=1000, soft_ms=5000, hard_ms=8000)
+# Translation needs more context than transcription: fragments come out as
+# unrelated English, so live pieces are longer when translating.
+LIVE_TRANSLATE = Policy(pause_ms=600, min_ms=2500, soft_ms=8000, hard_ms=12000)
 BATCH = Policy(pause_ms=600, min_ms=6000, soft_ms=20000, hard_ms=28000)
 
 # Whisper ends every chunk with a full stop and capitalizes the next one. When
@@ -148,13 +153,13 @@ def to_wav(pcm: np.ndarray) -> bytes:
 
 async def transcribe(pcm: np.ndarray, model: str, language: str, prompt: str) -> str:
     data = {"model": model, "response_format": "json", "temperature": "0"}
-    if language:
+    if language and not TRANSLATE:  # translation detects the spoken language itself
         data["language"] = language
     if prompt:
         data["prompt"] = prompt
     async with whisper_slots:  # dictations of several accounts share the one model in turn
         r = await whisper.post(
-            "/v1/audio/transcriptions",
+            "/v1/audio/translations" if TRANSLATE else "/v1/audio/transcriptions",
             data=data,
             files={"file": ("audio.wav", to_wav(pcm), "audio/wav")},
             headers=whisper_headers(),
@@ -503,7 +508,7 @@ async def backend_key(request: Request):
 async def backend_settings(request: Request):
     require_user(request)
     return {"liveTyping": True, "language": "", "afterText": "none", "maxSeconds": 600,
-            "model": DEFAULT_MODEL, "prompt": ""}
+            "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe"}
 
 
 @app.api_route("/api/enroll", methods=["GET", "POST"])
@@ -870,7 +875,7 @@ async def stream(ws: WebSocket):
         await send_piece(joiner.close())
 
     task = asyncio.create_task(worker())
-    segmenter = Segmenter(LIVE if live else BATCH)
+    segmenter = Segmenter((LIVE_TRANSLATE if TRANSLATE else LIVE) if live else BATCH)
     received = utterances = 0  # for the session log line
     ended = "disconnect"
     try:
