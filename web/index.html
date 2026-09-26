@@ -1392,7 +1392,7 @@ document.addEventListener('visibilitychange',()=>document.visibilityState==='vis
     const p=platformOf(d),esp=isEsp(d);
     $('#cpTitle').textContent=d.name;
     $('#cpIcon').innerHTML=LOGOS[p.kind]?`<svg class="logo" viewBox="0 0 24 24" aria-hidden="true">${LOGOS[p.kind]}</svg>`:svg('monitor');
-    $('#cpInfo').textContent=[p.label,d.version&&'v'+d.version,d.mac,d.online?'online':d.lastSeen?'last seen '+ago(d.lastSeen):'never connected',d.selected&&'active client'].filter(Boolean).join(' · ');
+    $('#cpInfo').textContent=[p.label,d.version&&'v'+d.version,d.mac,d.online?(d.address?`online via ${d.address} (${isLocalHost(d.address.replace(/:\d+$/,''))?'local network':'internet'})`:'online'):d.lastSeen?'last seen '+ago(d.lastSeen):'never connected',d.selected&&'active client'].filter(Boolean).join(' · ');
     $('#cpUpdate').hidden=!d.outdated;$('#cpUpdate').textContent=updating.has(d.id)?'Updating…':'Update';$('#cpUpdate').title=`Update to ${d.latest}`;$('#cpUpdate').disabled=updating.has(d.id);
     $('#cpBoard').hidden=!esp;if(!esp)return;
     const left=Math.max(0,Math.ceil((pairingUntil-Date.now())/1000));

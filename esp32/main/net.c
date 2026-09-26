@@ -54,7 +54,7 @@ static const char *TAG = "net";
 #define ROAM_CHECK_MS (30 * 1000)
 #define ROAM_WEAK_RSSI (-67)
 #define ROAM_MARGIN_DB 8
-#define LOCAL_BACKOFF_MS (10 * 60 * 1000)   // after a local address failed
+#define LOCAL_BACKOFF_MS (60 * 1000)         // after a local address failed (a server restart fails every address)
 #define FAILOVER_AFTER 3                     // failed attempts before trying another address
 #define MAX_ADDRESSES 6
 

@@ -594,6 +594,8 @@ def device_json(device, room: "Room", selected_id) -> dict:
             # ESP32 boards report whether a computer is connected over Bluetooth; null for others.
             "bluetooth": room.bluetooth.get(device["id"]) if device["id"] in room.devices else None,
             "selected": device["id"] == selected_id, "lastSeen": device["last_seen"],
+            # The address it is connected through (VK_URLS: a LAN address or a public name).
+            "address": (ws.headers.get("host") if (ws := room.devices.get(device["id"])) is not None else None),
             **client_update_info(device)}
 
 
@@ -847,8 +849,21 @@ async def credentials_from(request: Request) -> tuple[str, str]:
 
 
 def start_session(request: Request, response: Response, user):
-    response.set_cookie("vk_session", sessions.issue(user), max_age=86400 * 30, httponly=True,
+    set_session_cookie(request, response, sessions.issue(user))
+
+
+def set_session_cookie(request: Request, response: Response, token: str):
+    response.set_cookie("vk_session", token, max_age=sessions.ttl, httponly=True,
                         secure=public_base_url(request).startswith("https://"), samesite="lax")
+
+
+@app.middleware("http")
+async def renew_session(request: Request, call_next):
+    """Keeps a browser signed in while it is used: sessions end only on sign-out."""
+    response = await call_next(request)
+    if "set-cookie" not in response.headers and (token := sessions.renew(request.cookies.get("vk_session"))):
+        set_session_cookie(request, response, token)
+    return response
 
 
 def signups_open() -> bool:

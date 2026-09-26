@@ -236,13 +236,17 @@ class Store:
 
 
 class Sessions:
-    """Signed, stateless session cookies: user id, session epoch and expiry."""
+    """Signed, stateless session cookies: user id, session epoch and expiry.
 
-    def __init__(self, secret: str, store: Store, days: int = 30):
-        self._secret, self._store, self._ttl = secret.encode(), store, days * 86400
+    A session lasts until the user signs out or changes the password (which
+    bumps the epoch): the cookie is valid for 400 days, the most browsers keep
+    one, and is renewed at most once a day while it is used."""
+
+    def __init__(self, secret: str, store: Store, days: int = 400):
+        self._secret, self._store, self.ttl = secret.encode(), store, days * 86400
 
     def issue(self, user: sqlite3.Row) -> str:
-        payload = f"{user['id']}:{user['session_epoch']}:{int(time.time()) + self._ttl}:{secrets.token_hex(8)}"
+        payload = f"{user['id']}:{user['session_epoch']}:{int(time.time()) + self.ttl}:{secrets.token_hex(8)}"
         return payload + ":" + hmac.new(self._secret, payload.encode(), "sha256").hexdigest()
 
     def user(self, token: str | None) -> sqlite3.Row | None:
@@ -257,6 +261,14 @@ class Sessions:
             return user if user and user["session_epoch"] == int(epoch) else None
         except (ValueError, TypeError):
             return None
+
+    def renew(self, token: str | None) -> str | None:
+        """A fresh cookie for a valid session issued more than a day ago, else None."""
+        user = self.user(token)
+        if not user:
+            return None
+        expiry = int(token.rsplit(":", 1)[0].split(":")[2])
+        return self.issue(user) if expiry - time.time() < self.ttl - 86400 else None
 
 
 class RateLimiter:

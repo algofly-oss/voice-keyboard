@@ -11,7 +11,7 @@ Cloudflare name) the board keeps the list it gets on connect and the server's
 local CA. It connects to the first local address that accepts a connection,
 else to a public one, re-checks local ones on every heartbeat (~12 s) while on
 a public address, and falls back to a public one after three failed attempts
-(then leaves local ones alone for 10 minutes).
+(then leaves local ones alone for a minute).
 
 | File | |
 |---|---|
