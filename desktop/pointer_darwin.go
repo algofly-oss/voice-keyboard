@@ -12,6 +12,11 @@ import (
 // as typing. Moves are relative to where the pointer is now.
 type cgPoint struct{ X, Y float64 }
 
+type cgRect struct {
+	Origin cgPoint
+	Size   struct{ W, H float64 }
+}
+
 const (
 	cgEventLeftMouseDown  = 1
 	cgEventLeftMouseUp    = 2
@@ -43,7 +48,16 @@ var (
 	cgEventCreateMouseEvent   func(source uintptr, typ uint32, at cgPoint, button uint32) uintptr
 	cgEventCreateScrollWheel2 func(source uintptr, units uint32, wheelCount uint32, wheel1, wheel2, wheel3 int32) uintptr
 	cgEventSetIntegerField    func(event uintptr, field uint32, value int64)
+	cgEventSourceCreate       func(state int32) uintptr
+	cgGetDisplaysWithPoint    func(at cgPoint, max uint32, displays *uint32, count *uint32) int32
+	cgDisplayBounds           func(display uint32) cgRect
+
+	// Events from the HID system's source, like a real mouse's: the Dock and
+	// hot corners follow the hardware input state.
+	hidSource uintptr
 )
+
+const cgEventSourceStateHIDSystemState = 1
 
 // macPointer remembers a held button: while it is down, motion must be
 // posted as "dragged" events, or apps see a move without a drag.
@@ -69,11 +83,32 @@ func newPointer() (pointer, error) {
 	purego.RegisterLibFunc(&cgEventGetLocation, cg, "CGEventGetLocation")
 	purego.RegisterLibFunc(&cgEventCreateMouseEvent, cg, "CGEventCreateMouseEvent")
 	purego.RegisterLibFunc(&cgEventSetIntegerField, cg, "CGEventSetIntegerValueField")
+	purego.RegisterLibFunc(&cgEventSourceCreate, cg, "CGEventSourceCreate")
+	purego.RegisterLibFunc(&cgGetDisplaysWithPoint, cg, "CGGetDisplaysWithPoint")
+	purego.RegisterLibFunc(&cgDisplayBounds, cg, "CGDisplayBounds")
+	hidSource = cgEventSourceCreate(cgEventSourceStateHIDSystemState)
 	// The older CGEventCreateScrollWheelEvent is variadic; this one needs macOS 13.
 	if _, err := purego.Dlsym(cg, "CGEventCreateScrollWheelEvent2"); err == nil {
 		purego.RegisterLibFunc(&cgEventCreateScrollWheel2, cg, "CGEventCreateScrollWheelEvent2")
 	}
 	return &macPointer{}, nil
+}
+
+// onScreen keeps a point on a display: past the edge, it stops at the edge of
+// the display the pointer is on (where the Dock and hot corners wait), as a
+// real mouse does. Posted points off every screen are not a push to the edge.
+func onScreen(to, from cgPoint) cgPoint {
+	var display, count uint32
+	if cgGetDisplaysWithPoint(to, 1, &display, &count) == 0 && count > 0 {
+		return to
+	}
+	if cgGetDisplaysWithPoint(from, 1, &display, &count) != 0 || count == 0 {
+		return from
+	}
+	b := cgDisplayBounds(display)
+	to.X = math.Max(b.Origin.X, math.Min(b.Origin.X+b.Size.W-1, to.X))
+	to.Y = math.Max(b.Origin.Y, math.Min(b.Origin.Y+b.Size.H-1, to.Y))
+	return to
 }
 
 func location() cgPoint {
@@ -95,9 +130,8 @@ func (p *macPointer) Move(dx, dy int) error {
 	if err := allowed(); err != nil {
 		return err
 	}
-	at := location()
-	at.X += float64(dx)
-	at.Y += float64(dy)
+	from := location()
+	at := onScreen(cgPoint{from.X + float64(dx), from.Y + float64(dy)}, from)
 	kind, button := uint32(cgEventMouseMoved), uint32(0)
 	switch p.down {
 	case "left":
@@ -107,7 +141,7 @@ func (p *macPointer) Move(dx, dy int) error {
 	case "middle":
 		kind, button = cgEventOtherDragged, 2
 	}
-	event := cgEventCreateMouseEvent(0, kind, at, button)
+	event := cgEventCreateMouseEvent(hidSource, kind, at, button)
 	if event != 0 {
 		cgEventSetIntegerField(event, cgMouseEventDeltaX, int64(dx))
 		cgEventSetIntegerField(event, cgMouseEventDeltaY, int64(dy))
@@ -150,7 +184,7 @@ func (p *macPointer) press(button string, counted bool) error {
 		p.clicks = 1
 	}
 	p.lastButton, p.lastAt, p.lastPoint = button, time.Now(), at
-	return post(p.withClicks(cgEventCreateMouseEvent(0, b[0], at, b[2])))
+	return post(p.withClicks(cgEventCreateMouseEvent(hidSource, b[0], at, b[2])))
 }
 
 func (p *macPointer) Release(button string) error {
@@ -161,7 +195,7 @@ func (p *macPointer) Release(button string) error {
 	if p.down == button {
 		p.down = ""
 	}
-	return post(p.withClicks(cgEventCreateMouseEvent(0, b[1], location(), b[2])))
+	return post(p.withClicks(cgEventCreateMouseEvent(hidSource, b[1], location(), b[2])))
 }
 
 func (p *macPointer) withClicks(event uintptr) uintptr {
@@ -179,5 +213,5 @@ func (p *macPointer) Scroll(dx, dy int) error {
 		return errors.New("scrolling from the touchpad needs macOS 13 or later")
 	}
 	// wheel1 is vertical (positive scrolls up), wheel2 horizontal.
-	return post(cgEventCreateScrollWheel2(0, cgScrollEventUnitLine, 2, int32(-dy), int32(-dx), 0))
+	return post(cgEventCreateScrollWheel2(hidSource, cgScrollEventUnitLine, 2, int32(-dy), int32(-dx), 0))
 }
