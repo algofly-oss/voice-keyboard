@@ -252,6 +252,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .device-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--subtle)}
 .device-dot.on{background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
 .device-dot.wait{background:var(--warning);box-shadow:0 0 0 3px rgba(240,178,50,.16)}  /* online, no Bluetooth device */
+.update-btn{flex:none;height:24px;padding:0 9px;border:0;border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:700}
+.update-btn:disabled{background:var(--elevated);color:var(--muted)}
 .device-tag{flex:none;font-size:11px;font-weight:700;color:#a5adff;background:var(--accent-soft);padding:2px 7px;border-radius:999px}
 .device .icon-mini,.group-head .icon-mini{flex:none;width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
 .device .icon-mini svg.i,.group-head .icon-mini svg.i{width:16px;height:16px}
@@ -1119,8 +1121,10 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     return s<90?'just now':s<3600?`${Math.round(s/60)} min ago`:s<86400?`${Math.round(s/3600)} h ago`
       :s<7*86400?`${Math.round(s/86400)} d ago`:new Date(t*1000).toLocaleDateString([],{dateStyle:'medium'});
   }
+  const updating=new Map();  // client id → its version when Update was pressed
   window.renderDevices=devices=>{
     if(renaming!==null)return;
+    for(const d of devices)if(updating.has(d.id)&&updating.get(d.id)!==d.version){updating.delete(d.id);toast(`${d.name} updated to ${d.version}`)}
     const list=$('#deviceList');
     if(!devices.length){list.replaceChildren(Object.assign(document.createElement('li'),{className:'empty',textContent:'No client yet. Add one below.'}));}
     else list.replaceChildren(...devices.map(d=>{
@@ -1133,13 +1137,26 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
       li.innerHTML=`<div class="device-pick" role="button" tabindex="0" aria-pressed="${d.selected}" aria-label="Make this the active client">`+
         `<span class="os">${LOGOS[p.kind]?`<svg class="logo" viewBox="0 0 24 24" aria-hidden="true">${LOGOS[p.kind]}</svg>`:svg('monitor')}<i class="presence${d.online?(bt==='wait'?' wait':' on'):''}"></i></span>`+
         `<span class="text"><span class="title-row"><span class="title"></span>${esp?`<span class="bt ${bt}">${svg('bluetooth')}</span>`:''}</span><span class="hint"></span></span>`+
+        `${d.outdated?`<button type="button" class="update-btn">${updating.has(d.id)?'Updating…':'Update'}</button>`:''}`+
         `${d.selected?'<span class="device-tag">Active</span>':''}</div>`+
         `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename or describe">${svg('edit')}</button>`+
         `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;
       li.querySelector('.title').textContent=d.name;
       const btText=bt==='on'?'Bluetooth connected':bt==='wait'?'No Bluetooth device':'';
       // Two lines for every client; the rest is in the tooltip.
-      li.querySelector('.hint').textContent=[status,btText&&bt==='wait'?btText:'',d.description||p.label].filter(Boolean).join(' · ');
+      li.querySelector('.hint').textContent=[status,d.version&&'v'+d.version,btText&&bt==='wait'?btText:'',d.description||p.label].filter(Boolean).join(' · ');
+      // Newer build available: desktop clients update themselves; ESP32 boards from the setup page.
+      const upd=li.querySelector('.update-btn');
+      if(upd){upd.title=`Update to ${d.latest}`;upd.disabled=updating.has(d.id);
+        upd.onclick=async e=>{e.stopPropagation();
+          if(esp){location.href='/esp32';return}
+          if(!d.selfUpdate){  // too old to update itself: the install command, once
+            $('#addComputer').click();toast(`Run this install command on ${d.name} once; from then on it updates itself.`);return}
+          updating.set(d.id,d.version);upd.disabled=true;upd.textContent='Updating…';
+          const r=await fetch(`/api/devices/${d.id}/update`,{method:'POST'});
+          if(!r.ok){updating.delete(d.id);toast((await r.json().catch(()=>({}))).detail||'Could not start the update',{error:true});pollDevice();return}
+          toast(`${d.name} is updating to ${d.latest}`);
+          setTimeout(()=>{if(updating.delete(d.id))pollDevice()},120000)}}  // give up waiting after 2 min
       li.querySelector('.device-pick').title=[d.name,d.description,p.label,d.version&&'v'+d.version,d.mac,seenAt||status,btText].filter(Boolean).join('\n');
       const pick=li.querySelector('.device-pick'),select=()=>{if(renaming===null&&!d.selected)deviceAction('POST',`/api/devices/${d.id}/select`)};
       pick.onclick=select;

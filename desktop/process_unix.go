@@ -21,7 +21,14 @@ func startDetached() error {
 	if err != nil {
 		return err
 	}
+	return startDetachedExe(exe)
+}
+
+// startDetachedExe starts `exe run` from a given file (after an update the
+// running program's own path may point at the replaced file), with extra env.
+func startDetachedExe(exe string, env ...string) error {
 	cmd := exec.Command(exe, "run")
+	cmd.Env = append(os.Environ(), env...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err

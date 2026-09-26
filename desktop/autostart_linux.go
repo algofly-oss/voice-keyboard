@@ -59,3 +59,5 @@ func autostartEnabled() bool {
 	_, err := os.Stat(autostartPath())
 	return err == nil
 }
+
+func underLaunchd() bool { return false }

@@ -34,6 +34,12 @@ type message struct {
 	DX     int    `json:"dx"`
 	DY     int    `json:"dy"`
 	Button string `json:"button"`
+	// type "update": a newer build of this client
+	Version string `json:"version"`
+	URL     string `json:"url"`
+	SHA256  string `json:"sha256"`
+	Size    int64  `json:"size"`
+	Manual  bool   `json:"manual"`
 }
 
 const closeBadCredential = 4401
@@ -273,6 +279,8 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 			}
 		case "pointer":
 			handlePointer(m)
+		case "update":
+			handleUpdate(cfg.Server, updateOffer{Version: m.Version, URL: m.URL, SHA256: m.SHA256, Size: m.Size, Manual: m.Manual})
 		case "selected":
 			selected := m.Selected
 			log.Print(selectedText(selected))

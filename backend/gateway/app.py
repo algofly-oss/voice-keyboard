@@ -11,6 +11,7 @@ only port the backend exposes.
 
 import asyncio
 import base64
+import hashlib
 import hmac
 import io
 import json
@@ -451,13 +452,94 @@ async def sync_releases() -> str | None:
         return release["tag_name"]
 
 
+# ---- Client updates ----
+# Desktop clients update themselves: the server offers the newest build it
+# mirrors (at connect, after a new release syncs, or from the web app's Update
+# button). ESP32 boards have no room for over-the-air updates; they update
+# from the /esp32 page.
+AUTO_UPDATE = os.environ.get("AUTO_UPDATE", "true").lower() not in ("0", "false", "no")
+
+
+def version_key(text: str | None) -> tuple[int, ...] | None:
+    """(1, 5, 2) for "1.5.2" or "v1.5.2"; None for "dev" and other builds."""
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", text or "")
+    return tuple(map(int, m.groups())) if m else None
+
+
+_file_hashes: dict[str, tuple[float, str]] = {}
+
+
+def file_sha256(path: Path) -> str:
+    mtime = path.stat().st_mtime
+    cached = _file_hashes.get(str(path))
+    if not cached or cached[0] != mtime:
+        with path.open("rb") as f:
+            cached = (mtime, hashlib.file_digest(f, "sha256").hexdigest())
+        _file_hashes[str(path)] = cached
+    return cached[1]
+
+
+def latest_build(platform: str) -> dict | None:
+    """The newest build this server has for a client's platform ("darwin/arm64", "ESP32-C3")."""
+    if platform.upper().startswith("ESP32"):
+        chip = "esp32c3" if platform.upper() == "ESP32-C3" else "esp32"
+        path = release_path(f"vkeyboard-{chip}.bin")
+        return {"version": firmware_version(path), "url": "/esp32"} if path else None
+    os_, _, arch = platform.partition("/")
+    name = f"vkeyboard-{os_}-{arch}{'.exe' if os_ == 'windows' else ''}"
+    if name not in RELEASE_FILES or not (path := release_path(name)):
+        return None
+    try:
+        tag = json.loads((RELEASES_DIR / "release.json").read_text()).get(name, "").split(":", 1)[0]
+    except (OSError, ValueError):
+        return None
+    return {"version": tag.removeprefix(RELEASE_TAG_PREFIX), "url": f"/client/{name}",
+            "sha256": file_sha256(path), "size": path.stat().st_size}
+
+
+def update_for(device) -> dict | None:
+    """The update to offer a desktop client, or None when it is current (or a dev build)."""
+    build = latest_build(device["platform"])
+    have, latest = version_key(device["version"]), version_key(build and build["version"])
+    if not build or "sha256" not in build or not have or not latest or latest <= have:
+        return None
+    return {"type": "update", **build}
+
+
+async def offer_update(ws: WebSocket, device, manual: bool = False) -> bool:
+    update = update_for(device)
+    if not update and manual and (build := latest_build(device["platform"])) and "sha256" in build:
+        update = {"type": "update", **build}  # the button reinstalls even a current or dev build
+    if not update:
+        return False
+    log.info("Offering %s %s to %r (%s)", "update" if not manual else "requested update",
+             update["version"], device["name"], device["version"])
+    await ws.send_json({**update, "manual": manual})
+    return True
+
+
+async def offer_updates_to_everyone():
+    """After a release syncs: every connected, outdated desktop client."""
+    for room in list(rooms.values()):
+        for device_id, ws in list(room.devices.items()):
+            if device := store._one("SELECT * FROM devices WHERE id=?", (device_id,)):
+                try:
+                    await offer_update(ws, device)
+                except Exception:
+                    pass
+
+
 async def sync_releases_forever():
     if not GITHUB_REPO:
         return
+    previous = None
     while True:
         try:
             tag = await sync_releases()
             log.info("Client release %s is current", tag) if tag else log.info("No %s* release on %s yet", RELEASE_TAG_PREFIX, GITHUB_REPO)
+            if tag and previous and tag != previous and AUTO_UPDATE:
+                await offer_updates_to_everyone()
+            previous = tag
         except Exception as e:  # GitHub unreachable or token missing; keep serving what we have.
             log.warning("Release sync failed: %s", e)
         await asyncio.sleep(RELEASE_SYNC_SECONDS)
@@ -477,7 +559,20 @@ def device_json(device, room: "Room", selected_id) -> dict:
             "online": device["id"] in room.devices,
             # ESP32 boards report whether a computer is connected over Bluetooth; null for others.
             "bluetooth": room.bluetooth.get(device["id"]) if device["id"] in room.devices else None,
-            "selected": device["id"] == selected_id, "lastSeen": device["last_seen"]}
+            "selected": device["id"] == selected_id, "lastSeen": device["last_seen"],
+            **client_update_info(device)}
+
+
+def client_update_info(device) -> dict:
+    """For the Clients list: the newest version for this client, and whether it is behind."""
+    build = latest_build(device["platform"] or "")
+    have, latest = version_key(device["version"]), version_key(build and build["version"])
+    return {"latest": build["version"] if build else None, "outdated": bool(have and latest and latest > have),
+            # Desktop clients from 1.5.3 on install updates themselves; older ones need the install command once.
+            "selfUpdate": bool(have and have >= SELF_UPDATE_SINCE) and not (device["platform"] or "").upper().startswith("ESP32")}
+
+
+SELF_UPDATE_SINCE = (1, 5, 3)
 
 
 @app.get("/api/status")
@@ -518,6 +613,23 @@ async def client_errors(request: Request):
     return {"errors": [{"at": r["at"], "message": r["message"], "device": r["device_id"], "client": r["name"],
                         "platform": r["platform"], "version": r["version"], **({"user": r["username"]} if everyone else {})}
                        for r in rows]}
+
+
+@app.post("/api/devices/{device_id}/update")
+async def update_device_now(device_id: int, request: Request):
+    """The web app's Update button: the client installs the newest build now."""
+    user = require_user(request)
+    device = store.device(user["id"], device_id)
+    if not device:
+        raise HTTPException(404, "No such client")
+    if (device["platform"] or "").upper().startswith("ESP32"):
+        raise HTTPException(400, "ESP32 boards update from the setup page (/esp32)")
+    ws = room_for(user).devices.get(device_id)
+    if ws is None:
+        raise HTTPException(409, "The client is offline; it updates itself when it connects")
+    if not await offer_update(ws, device, manual=True):
+        raise HTTPException(409, "This server has no build for this client yet")
+    return {"ok": True}
 
 
 @app.post("/api/devices/{device_id}/select")
@@ -763,6 +875,8 @@ async def keyboard(ws: WebSocket):
     server -> {"type":"ready","device":7,"client":"<name>","credential":"…","selected":true}
     server -> {"type":"selected","selected":false}      when the user picks another computer
     server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
+    server -> {"type":"update","version":"1.5.3","url":"/client/…","sha256":"…","size":…,"manual":false}
+              a newer build: the desktop client installs it and restarts
     client -> {"type":"status","bluetooth":"connected"|"waiting"}   ESP32 boards, on every change
     client -> {"type":"log","level":"error","message":"…"}   an error on the client, stored for troubleshooting
     The token is the account's install token (first pairing), the device's
@@ -809,6 +923,8 @@ async def keyboard(ws: WebSocket):
         room.devices[device["id"]] = ws
         await ws.send_json({"type": "ready", "device": device["id"], "client": device["name"],
                             "credential": credential, "selected": room.selected == device["id"]})
+        if AUTO_UPDATE:
+            await offer_update(ws, store._one("SELECT * FROM devices WHERE id=?", (device["id"],)))
         await announce_selection(room, skip=ws)
         if room.selected == device["id"]:
             await flush_pending(room, ws)

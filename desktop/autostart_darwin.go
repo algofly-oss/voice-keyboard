@@ -85,3 +85,6 @@ func xmlEscape(s string) string {
 	}
 	return out
 }
+
+// underLaunchd: started by the login item, which launchd restarts after a failed exit.
+func underLaunchd() bool { return os.Getenv("XPC_SERVICE_NAME") == launchLabel }

@@ -49,7 +49,13 @@ func startDetached() error {
 	if err != nil {
 		return err
 	}
+	return startDetachedExe(exe)
+}
+
+// startDetachedExe starts `exe run` from a given file, with extra env.
+func startDetachedExe(exe string, env ...string) error {
 	cmd := exec.Command(exe, "run")
+	cmd.Env = append(os.Environ(), env...)
 	const createNoWindow, detachedProcess, newProcessGroup = 0x08000000, 0x00000008, 0x00000200
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow | detachedProcess | newProcessGroup}
 	if err := cmd.Start(); err != nil {

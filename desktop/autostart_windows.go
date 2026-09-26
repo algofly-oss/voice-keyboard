@@ -49,3 +49,5 @@ func autostartEnabled() bool {
 	_, err := reg("query", runKey, "/v", "VKeyboard")
 	return err == nil
 }
+
+func underLaunchd() bool { return false }

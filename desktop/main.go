@@ -173,6 +173,8 @@ func runCommand() error {
 	if err != nil {
 		return err
 	}
+	waitForPreviousProcess() // after a self-update, the old build is still exiting
+	removeLeftovers()
 	if s := readState(); s.running() && s.PID != os.Getpid() {
 		return fmt.Errorf("already running (pid %d)", s.PID)
 	}
