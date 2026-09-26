@@ -64,6 +64,9 @@ func post(event uintptr) error {
 }
 
 func (macPointer) Move(dx, dy int) error {
+	if err := allowed(); err != nil {
+		return err
+	}
 	p := location()
 	p.X += float64(dx)
 	p.Y += float64(dy)
@@ -71,6 +74,9 @@ func (macPointer) Move(dx, dy int) error {
 }
 
 func (macPointer) Click(button string) error {
+	if err := allowed(); err != nil {
+		return err
+	}
 	types := map[string][3]uint32{
 		"left":   {cgEventLeftMouseDown, cgEventLeftMouseUp, 0},
 		"right":  {cgEventRightMouseDown, cgEventRightMouseUp, 1},
@@ -84,6 +90,9 @@ func (macPointer) Click(button string) error {
 }
 
 func (macPointer) Scroll(dx, dy int) error {
+	if err := allowed(); err != nil {
+		return err
+	}
 	if cgEventCreateScrollWheel2 == nil {
 		return errors.New("scrolling from the touchpad needs macOS 13 or later")
 	}

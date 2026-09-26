@@ -20,6 +20,8 @@ out=$(mktemp -d)
   [ "$goos" = windows ] && ext=.exe && ldflags="$ldflags -H windowsgui"
   CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -trimpath -ldflags "$ldflags" -o "$out/vkeyboard-$goos-$goarch$ext" .
 done)
+# macOS: our own certificate, so an updated client keeps its Accessibility permission.
+tools/macos-sign.sh "$out/vkeyboard-darwin-amd64" "$out/vkeyboard-darwin-arm64"
 esp32/build.sh "$version"
 cp esp32/dist/vkeyboard-esp32.bin esp32/dist/vkeyboard-esp32c3.bin "$out"/
 

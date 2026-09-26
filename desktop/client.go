@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -156,9 +157,24 @@ var connectedAt time.Time
 // one place. Reported while offline, they wait for the next connection.
 var errorReports = make(chan string, 50)
 
+var (
+	reportedMu sync.Mutex
+	reportedAt = map[string]time.Time{}
+)
+
 func reportError(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	log.Print(msg)
+	reportedMu.Lock()
+	recent := time.Since(reportedAt[msg]) < time.Minute
+	reportedAt[msg] = time.Now()
+	if len(reportedAt) > 200 {
+		clear(reportedAt)
+	}
+	reportedMu.Unlock()
+	if recent { // the same failure again (every keystroke): once a minute is enough for the server
+		return
+	}
 	select {
 	case errorReports <- msg:
 	default: // the queue is full while offline; the local log still has it
@@ -308,13 +324,18 @@ var current state
 // watchPermission asks for the typing permission once (macOS shows its dialog
 // for this agent) and re-checks until it is granted, so typing starts without
 // a restart once the user allows it.
+// watchPermission re-checks the typing permission: every 5 s while it is
+// missing, every minute once allowed (it can be taken away), and at once, with
+// the system prompt, when `vkeyboard permission` asks.
 func watchPermission(ctx context.Context) {
-	prompted := false
+	requests := make(chan os.Signal, 1)
+	notifyPermissionRequests(requests)
+	prompt := true
 	for {
-		err := checkTypingPermission(!prompted)
-		prompted = true
+		err := checkTypingPermission(prompt)
+		prompt = false
 		stateMu.Lock()
-		changed := err != nil && err.Error() != warning
+		was := warning
 		warning = ""
 		if err != nil {
 			warning = err.Error()
@@ -324,16 +345,22 @@ func watchPermission(ctx context.Context) {
 		if s.PID != 0 {
 			updateState(s)
 		}
-		if changed { // e.g. Accessibility not allowed on macOS: typing and the touchpad fail
+		switch {
+		case err != nil && err.Error() != was: // e.g. Accessibility not allowed on macOS: typing and the touchpad fail
 			reportError("permission: %v", err)
+		case err == nil && was != "":
+			log.Print("permission granted: typing and the touchpad work now")
 		}
+		wait := 5 * time.Second
 		if err == nil {
-			return
+			wait = time.Minute
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(5 * time.Second):
+		case <-requests:
+			prompt = true
+		case <-time.After(wait):
 		}
 	}
 }

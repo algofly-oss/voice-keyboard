@@ -28,6 +28,7 @@ Usage:
   vkeyboard stop        stop and do not start at login
   vkeyboard status      show whether it is running and connected
   vkeyboard logs        show recent log lines and follow new ones (-n 50, --no-follow)
+  vkeyboard permission  ask again for the typing permission (macOS: Accessibility)
   vkeyboard config      show or change typing: --method type|paste --delay-ms N|default
   vkeyboard type-test   type a test string after 3 seconds
   vkeyboard uninstall   stop and remove settings and login item
@@ -52,6 +53,8 @@ func main() {
 		err = statusCommand()
 	case "logs":
 		err = logsCommand(args)
+	case "permission", "allow":
+		err = permissionCommand()
 	case "config":
 		err = configCommand(args)
 	case "run":
@@ -184,6 +187,30 @@ func runCommand() error {
 	defer stop()
 	defer clearState()
 	return serve(ctx, cfg)
+}
+
+// permissionCommand has the running client check its typing permission again
+// and show the system prompt, then waits for it to be allowed.
+func permissionCommand() error {
+	s := readState()
+	if !s.running() {
+		return errors.New("the client is not running; start it with: vkeyboard start")
+	}
+	if err := requestPermissionCheck(s.PID); err != nil {
+		return err
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if readState().Warning == "" {
+		fmt.Println("Allowed: typing and the touchpad work.")
+		return nil
+	}
+	fmt.Println("Waiting for the permission (up to 60 s)...")
+	fmt.Println(permissionSteps())
+	if waitForState(func(s state) bool { return s.running() && s.Warning == "" }, 60*time.Second) == nil {
+		fmt.Println("Allowed: typing and the touchpad work now.")
+		return nil
+	}
+	return errors.New("still not allowed: " + readState().Warning)
 }
 
 func typeTestCommand(text string) error {

@@ -67,3 +67,8 @@ func startDetachedExe(exe string, env ...string) error {
 func removeHint(exe string) string {
 	return fmt.Sprintf(`Remove-Item -Recurse "%s"`, filepath.Dir(exe))
 }
+
+// Windows needs no typing permission.
+func notifyPermissionRequests(ch chan os.Signal) {}
+
+func requestPermissionCheck(pid int) error { return nil }

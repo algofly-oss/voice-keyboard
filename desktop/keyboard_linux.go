@@ -61,3 +61,5 @@ func checkTypingPermission(prompt bool) error {
 	}
 	return nil
 }
+
+func permissionSteps() string { return "If typing still fails, " + linuxSetupHint }

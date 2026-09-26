@@ -143,3 +143,5 @@ func send(events []input) error {
 	}
 	return nil
 }
+
+func permissionSteps() string { return "" }

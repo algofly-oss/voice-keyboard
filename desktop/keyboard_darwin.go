@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -138,7 +139,21 @@ func checkTypingPermission(prompt bool) error {
 
 func (macKeyboard) Close() {}
 
+// Without Accessibility, macOS drops posted events without an error; checking
+// first makes every blocked keystroke, key and pointer action fail visibly.
+var errAccessibility = errors.New("macOS blocks it: vkeyboard is not allowed under Privacy & Security → Accessibility; run: vkeyboard permission")
+
+func allowed() error {
+	if !axIsProcessTrusted() {
+		return errAccessibility
+	}
+	return nil
+}
+
 func (macKeyboard) Type(text string) error {
+	if err := allowed(); err != nil {
+		return err
+	}
 	for _, r := range text {
 		if r == '\n' {
 			if err := (macKeyboard{}).Key("enter", "press"); err != nil {
@@ -163,6 +178,9 @@ func (macKeyboard) Type(text string) error {
 }
 
 func (macKeyboard) Key(name, state string) error {
+	if err := allowed(); err != nil {
+		return err
+	}
 	if c, ok := parseCombo(name); ok {
 		if state == "up" {
 			return nil
@@ -204,4 +222,14 @@ func (macKeyboard) Key(name, state string) error {
 		cfRelease(event)
 		return nil
 	}, state)
+}
+
+// permissionSteps: what to do if no prompt appears. A stale entry for an
+// earlier build (same name, different binary) blocks the prompt.
+func permissionSteps() string {
+	exe, _ := os.Executable()
+	return `If no prompt appears, or allowing it does not help:
+  1. System Settings → Privacy & Security → Accessibility (it has been opened for you)
+  2. select vkeyboard and remove it with −  (an entry for an older build)
+  3. click +, press ⌘⇧G, enter ` + exe + `, and turn it on`
 }
