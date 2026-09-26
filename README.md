@@ -95,6 +95,25 @@ vkeyboard status   # connected? selected to type?  Also: logs, stop, start, unin
 On macOS, allow it under **Privacy & Security → Accessibility** when prompted.
 Details are in [desktop/README.md](desktop/README.md).
 
+## 5. Or use an ESP32 board as a Bluetooth keyboard
+
+An ESP32 or ESP32-C3 board can be a client too. It joins your Wi-Fi, receives
+your dictation from this server, and types it into whatever computer, tablet or
+phone it is paired with over Bluetooth. Nothing is installed on that device.
+
+Plug the board into the computer where your browser runs, and open
+**Settings → Clients → Add an ESP32 board** (the `/esp32` page) in Chrome or
+Edge. Enter the Wi-Fi network and password, and a name. The page installs the
+firmware over USB, writes the settings to the board, and shows when it has
+joined Wi-Fi and connected to this server. Then pair **that name** in the
+target device's Bluetooth settings. The same page updates the firmware or
+changes the settings later, without removing the pairing.
+
+It types what a US keyboard layout can type: accented Latin letters become
+plain ones (é → e), and other scripts are skipped. The firmware is in
+[esp32/](esp32/README.md), and `tools/release.sh` publishes it with the desktop
+client.
+
 ## Accounts
 
 The first account (`admin`) is created from `WEB_PASSWORD`. Its username and

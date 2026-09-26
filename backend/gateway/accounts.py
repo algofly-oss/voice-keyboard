@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS devices (
     name            TEXT NOT NULL,
     platform        TEXT NOT NULL DEFAULT '',
     version         TEXT NOT NULL DEFAULT '',
+    description     TEXT NOT NULL DEFAULT '',  -- the user's own note, to tell similar clients apart
     credential_hash TEXT NOT NULL UNIQUE,
     created_at      INTEGER NOT NULL,
     last_seen       INTEGER,
@@ -80,6 +81,10 @@ class Store:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA foreign_keys=ON")
             self._db.executescript(SCHEMA)
+            # Columns added after the first release.
+            columns = {row["name"] for row in self._db.execute("PRAGMA table_info(devices)")}
+            if "description" not in columns:
+                self._db.execute("ALTER TABLE devices ADD COLUMN description TEXT NOT NULL DEFAULT ''")
 
     def _q(self, sql: str, args=()) -> list[sqlite3.Row]:
         with self._lock:
@@ -169,7 +174,7 @@ class Store:
         return self._q("SELECT * FROM devices WHERE user_id=? ORDER BY created_at", (user_id,))
 
     def update_device(self, device_id: int, **fields):
-        allowed = {k: v for k, v in fields.items() if k in {"name", "platform", "version", "last_seen"}}
+        allowed = {k: v for k, v in fields.items() if k in {"name", "description", "platform", "version", "last_seen"}}
         if allowed:
             sets = ", ".join(f"{k}=?" for k in allowed)
             self._q(f"UPDATE devices SET {sets} WHERE id=?", (*allowed.values(), device_id))

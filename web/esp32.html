@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e1f22">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icons/icon-32.png" type="image/png" sizes="32x32">
+<title>Add an ESP32 · Voice Keyboard</title>
+<style>
+/* Same tokens as index.html. */
+:root{
+  --bg:#1e1f22;--surface:#2b2d31;--surface-2:#313338;--elevated:#383a40;--input:#1e1f22;
+  --border:#3f4147;--border-soft:rgba(255,255,255,.06);
+  --text:#f2f3f5;--muted:#b5bac1;--subtle:#80848e;
+  --accent:#5865f2;--accent-hover:#4752c4;--accent-soft:rgba(88,101,242,.16);
+  --danger:#f23f43;--danger-soft:rgba(242,63,67,.14);--success:#23a55a;--success-soft:rgba(35,165,90,.14);--warning:#f0b232;
+  --radius:12px;--radius-sm:8px;--ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",Roboto,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+[hidden]{display:none!important}
+
+/* One screen per step; the actions stay at the bottom, within thumb reach. */
+.app{min-height:100vh;min-height:100dvh;max-width:520px;margin:0 auto;display:flex;flex-direction:column;
+  padding:calc(env(safe-area-inset-top) + 8px) 16px 0}
+.topbar{display:flex;align-items:center;gap:8px;height:48px}
+.topbar h1{flex:1;margin:0;font-size:17px;font-weight:650;text-align:center}
+.icon-btn{width:40px;height:40px;border-radius:var(--radius);border:1px solid var(--border-soft);background:var(--surface);color:var(--muted);display:grid;place-items:center;text-decoration:none}
+.icon-btn:hover{color:var(--text);background:var(--elevated)}
+
+.stepper{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 12px;padding:0;list-style:none}
+.stepper button{width:100%;border:0;background:none;padding:0;display:flex;flex-direction:column;gap:6px;color:var(--subtle);font-size:12px;font-weight:600;text-align:left}
+.stepper button::before{content:"";height:4px;border-radius:2px;background:var(--elevated);transition:background .25s}
+.stepper [data-state=done]{color:var(--muted)}.stepper [data-state=done]::before{background:var(--success)}
+.stepper [aria-current=step]{color:var(--text)}.stepper [aria-current=step]::before{background:var(--accent)}
+.stepper button:disabled{cursor:default}
+
+/* Live status of the board: three compact pills. */
+.strip{display:flex;gap:6px;margin-bottom:12px}
+.pill{flex:1;min-width:0;display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:999px;background:var(--surface);border:1px solid var(--border-soft);font-size:12px;color:var(--muted)}
+.pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--subtle)}
+[data-state=wait] .dot{background:var(--warning);animation:blink 1.2s infinite}
+[data-state=ok] .dot{background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
+[data-state=bad] .dot{background:var(--danger);box-shadow:0 0 0 3px var(--danger-soft)}
+[data-state=bad]{color:#ffb3b5}
+@keyframes blink{50%{opacity:.35}}
+
+.pane{flex:1;display:flex;flex-direction:column;gap:14px;animation:fade .25s var(--ease)}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.pane h2{margin:4px 0 0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.lead{margin:0;color:var(--muted);font-size:15px}
+.hint{margin:0;font-size:13px;color:var(--subtle)}
+.hint a,.lead a{color:#a5adff}
+.card{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:14px}
+.facts dt{color:var(--subtle)}.facts dd{margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.board-line{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.board-line svg.i{width:16px;height:16px;color:var(--subtle)}
+
+.field{display:flex;flex-direction:column;gap:6px}
+.field>label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+input[type=text],input[type=password],input[type=url]{width:100%;height:48px;padding:0 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--input);color:var(--text);font-size:16px}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+input::placeholder{color:var(--subtle)}
+.with-btn{position:relative}
+.with-btn input{padding-right:52px}
+.with-btn button{position:absolute;right:4px;top:4px;width:40px;height:40px;border:0;border-radius:6px;background:none;color:var(--muted);display:grid;place-items:center}
+.with-btn button:hover:not(:disabled){color:var(--text);background:var(--elevated)}
+.with-btn button:disabled{opacity:.35}
+.spin{animation:spin .9s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.networks{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--input);max-height:200px;overflow:auto}
+.networks button{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:0;border-bottom:1px solid var(--border-soft);background:none;text-align:left;font-size:15px}
+.networks button:last-child{border-bottom:0}
+.networks button:hover{background:var(--surface)}
+.networks .ssid{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.networks .sig{color:var(--subtle);font-size:12px;font-variant-numeric:tabular-nums}
+.two{display:grid;grid-template-columns:1fr;gap:14px}
+@media (min-width:480px){.two{grid-template-columns:1fr 1fr}}
+details{border-radius:var(--radius-sm)}
+summary{cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px}
+summary::-webkit-details-marker{display:none}
+summary svg.i{width:16px;height:16px;transition:transform .2s}
+details[open] summary svg.i{transform:rotate(90deg)}
+details .inner{display:flex;flex-direction:column;gap:14px;padding-top:10px}
+label.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--muted)}
+label.check input{margin-top:3px;width:18px;height:18px;accent-color:var(--accent)}
+
+.msg{margin:0;font-size:14px;color:var(--muted);min-height:0}
+.msg:empty{display:none}
+.msg.error{padding:10px 12px;border-radius:var(--radius-sm);background:var(--danger-soft);color:#ffb3b5}
+.callout{padding:10px 12px;border-radius:var(--radius-sm);background:rgba(240,178,50,.1);color:#f5d08a;font-size:14px}
+.callout.error{background:var(--danger-soft);color:#ffb3b5}
+
+/* Install progress */
+.progress-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:26px 0 10px;text-align:center}
+.ring{--p:0;width:132px;height:132px;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(var(--accent) calc(var(--p)*1%),var(--elevated) 0)}
+.ring b{width:112px;height:112px;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.ring.busy{background:conic-gradient(var(--accent) 25%,var(--elevated) 0);animation:spin 1.2s linear infinite}
+.ring.busy b{animation:spin 1.2s linear infinite reverse}
+.ring.ok{background:var(--success)}.ring.bad{background:var(--danger)}
+.stage{margin:0;font-size:16px;font-weight:600}
+.stage.error{color:#ff8a8d}
+
+/* Pairing */
+.big-name{font-size:20px;font-weight:700;color:#a5adff;overflow-wrap:anywhere}
+ol.pair{margin:0;padding:0;list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:10px}
+ol.pair li{counter-increment:s;display:flex;gap:10px;font-size:15px;color:var(--muted)}
+ol.pair li::before{content:counter(s);flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:#a5adff;font-size:12px;font-weight:700;display:grid;place-items:center}
+ol.pair b{color:var(--text)}
+
+.actions{position:sticky;bottom:0;margin-top:auto;display:flex;flex-direction:column;gap:8px;
+  padding:14px 0 calc(env(safe-area-inset-bottom) + 14px);background:linear-gradient(to bottom,transparent,var(--bg) 14px)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:50px;padding:0 18px;border:0;border-radius:var(--radius);background:var(--accent);color:#fff;font-size:16px;font-weight:650;text-decoration:none;transition:background .15s}
+.btn:hover:not(:disabled){background:var(--accent-hover)}
+.btn:disabled{background:var(--elevated);color:var(--subtle)}
+.btn.secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.btn.secondary:hover:not(:disabled){background:var(--elevated)}
+.btn.ghost{background:none;color:#a5adff;height:40px}
+.btn.danger{background:none;color:#ff8a8d;border:1px solid rgba(242,63,67,.35)}
+.btn.small{height:40px;font-size:14px;border-radius:var(--radius-sm)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+
+/* Serial log and tools: a bottom sheet. */
+.sheet{border:0;padding:0;margin:auto auto 0;width:100%;max-width:520px;max-height:85dvh;background:var(--surface-2);color:var(--text);border-radius:18px 18px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.4)}
+.sheet::backdrop{background:rgba(0,0,0,.55)}
+.sheet-in{display:flex;flex-direction:column;gap:12px;padding:14px 16px calc(env(safe-area-inset-bottom) + 16px)}
+.sheet-head{display:flex;align-items:center;gap:8px}
+.sheet-head h2{flex:1;margin:0;font-size:17px}
+pre.log{margin:0;height:min(46dvh,340px);overflow:auto;padding:10px;border-radius:var(--radius-sm);background:#111214;border:1px solid var(--border);font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c9cdd3;white-space:pre-wrap;word-break:break-all}
+code{font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:1px 5px;border-radius:4px;background:var(--elevated);color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <a class="icon-btn" href="/" aria-label="Back to Voice Keyboard"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></a>
+    <h1>Add an ESP32 board</h1>
+    <button class="icon-btn" id="openTools" type="button" aria-label="Serial log and tools"><svg class="i" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></svg></button>
+  </header>
+
+  <nav aria-label="Steps"><ol class="stepper" id="stepper">
+    <li><button type="button" data-go="connect">Connect</button></li>
+    <li><button type="button" data-go="wifi">Wi-Fi</button></li>
+    <li><button type="button" data-go="install">Install</button></li>
+    <li><button type="button" data-go="pair">Pair</button></li>
+  </ol></nav>
+
+  <div class="strip" id="strip" hidden>
+    <div class="pill" id="stWifi" title="Wi-Fi"><i class="dot"></i><span>Wi-Fi</span></div>
+    <div class="pill" id="stServer" title="Server"><i class="dot"></i><span>Server</span></div>
+    <div class="pill" id="stBle" title="Bluetooth"><i class="dot"></i><span>Bluetooth</span></div>
+  </div>
+
+  <div class="callout error" id="unsupported" hidden></div>
+  <div class="callout" id="signin" hidden>You are not signed in. <a href="/" style="color:inherit;font-weight:600">Sign in</a>, then come back.</div>
+
+  <!-- 1. Connect -->
+  <section class="pane" data-step="connect">
+    <h2>Plug in the board</h2>
+    <p class="lead">Connect an ESP32 or ESP32-C3 to this device with a USB data cable. It becomes a Bluetooth keyboard that types your dictation anywhere.</p>
+    <div class="card" id="boardCard" hidden><dl class="facts" id="boardFacts"></dl></div>
+    <p class="msg" id="msgConnect"></p>
+    <details id="portHelp">
+      <summary><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>Board not listed?</summary>
+      <div class="inner"><p class="hint">It is usually called <i>CP2102</i>, <i>CH340</i> or <i>USB JTAG/serial debug unit</i>. Try another cable: many only carry power. On Windows and macOS, CH340 boards need their <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html" target="_blank" rel="noopener">driver</a>.</p></div>
+    </details>
+    <div class="actions">
+      <button class="btn" id="connect" type="button">Choose USB port</button>
+      <button class="btn" id="toWifi" type="button" hidden>Continue</button>
+      <button class="btn ghost" id="disconnect" type="button" hidden>Use another board</button>
+    </div>
+  </section>
+
+  <!-- 2. Wi-Fi and name -->
+  <section class="pane" data-step="wifi" hidden>
+    <h2>Wi-Fi and name</h2>
+    <div class="board-line" id="boardLine"></div>
+    <div class="field"><label for="ssid">Wi-Fi network</label>
+      <div class="with-btn"><input id="ssid" type="text" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Network name (2.4 GHz)">
+        <button id="scan" type="button" aria-label="Scan for networks" title="Scan for networks" disabled><svg class="i" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg></button></div>
+      <div class="networks" id="networks" hidden></div></div>
+    <div class="field"><label for="pass">Password</label>
+      <div class="with-btn"><input id="pass" type="password" maxlength="64" autocomplete="off" placeholder="Leave empty for an open network">
+        <button id="showPass" type="button" aria-label="Show password"><svg class="i" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+    <div class="two">
+      <div class="field"><label for="btName">Name</label>
+        <input id="btName" type="text" maxlength="29" autocomplete="off" placeholder="Voice Keyboard"></div>
+      <div class="field"><label for="desc">Description</label>
+        <input id="desc" type="text" maxlength="200" autocomplete="off" placeholder="Optional note"></div>
+    </div>
+    <p class="hint">The name is what devices see when pairing over Bluetooth. The password stays on the board.</p>
+    <details>
+      <summary><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>Advanced</summary>
+      <div class="inner">
+        <div class="field"><label for="server">Server address</label>
+          <input id="server" type="url" autocomplete="off" spellcheck="false">
+          <p class="hint">How the board reaches this server over Wi-Fi. Change it if the board is on another network, or if this name only resolves on this device (such as <code>.local</code>).</p></div>
+        <label class="check"><input type="checkbox" id="erase"> <span>Erase the whole board first (settings and paired devices)</span></label>
+      </div>
+    </details>
+    <p class="msg" id="msgWifi"></p>
+    <div class="actions">
+      <button class="btn" id="install" type="button" disabled>Install and set up</button>
+      <button class="btn secondary" id="applyOnly" type="button" hidden>Save settings only</button>
+      <p class="hint" id="installHint" style="text-align:center"></p>
+    </div>
+  </section>
+
+  <!-- 3. Install -->
+  <section class="pane" data-step="install" hidden>
+    <div class="progress-wrap">
+      <div class="ring busy" id="ring"><b id="ringText"></b></div>
+      <p class="stage" id="stage" aria-live="polite"></p>
+      <p class="hint">Keep the board plugged in and this page open.</p>
+    </div>
+    <div class="callout" id="bootHelp" hidden>If the board does not respond: hold <b>BOOT</b>, press and release <b>RESET</b> (or <b>EN</b>), release BOOT, then try again.</div>
+    <div class="actions" id="installActions" hidden>
+      <button class="btn" id="retry" type="button">Try again</button>
+      <button class="btn secondary" id="backToWifi" type="button">Change settings</button>
+    </div>
+  </section>
+
+  <!-- 4. Pair -->
+  <section class="pane" data-step="pair" hidden>
+    <h2>Pair it</h2>
+    <div class="card">
+      <ol class="pair">
+        <li><span>On the computer, tablet or phone to type into, open <b>Bluetooth</b> settings.</span></li>
+        <li><span>Add <span class="big-name" id="pairName">Voice Keyboard</span>. No PIN needed.</span></li>
+        <li><span>Put the cursor in a text field there, then tap <b>Type a test</b>.</span></li>
+      </ol>
+    </div>
+    <p class="hint">It reconnects to that device by itself. To move it to another device, remove it there first, or use <b>Forget paired devices</b> in the tools (top right).</p>
+    <p class="msg" id="msgPair"></p>
+    <div class="actions">
+      <button class="btn" id="testType" type="button" disabled>Type a test</button>
+      <div class="row">
+        <button class="btn secondary small" id="makeActive" type="button" hidden>Make it active</button>
+        <a class="btn secondary small" href="/">Start dictating</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<dialog class="sheet" id="tools">
+  <div class="sheet-in">
+    <div class="sheet-head"><h2>Serial log and tools</h2>
+      <button class="icon-btn" id="closeTools" type="button" aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <pre class="log" id="log" aria-live="off"></pre>
+    <div class="row">
+      <button class="btn secondary small" data-cmd="reboot" type="button" disabled>Restart</button>
+      <button class="btn secondary small" data-cmd="forget_bt" type="button" disabled>Forget paired devices</button>
+    </div>
+    <button class="btn danger small" data-cmd="erase" type="button" disabled>Erase all settings on the board</button>
+  </div>
+</dialog>
+
+<script type="module">
+import {ESPLoader, Transport} from '/vendor/esptool-js-0.7.0.mjs';
+
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const CHIPS = {'ESP32': 'esp32', 'ESP32-C3': 'esp32c3'};
+// Flash layout of the firmware (partition table "single app, large"), the same for both chips.
+const NVS_START = 0x9000, APP_START = 0x10000;
+// Known USB-to-serial chips on ESP32 boards, to name the port.
+const USB_NAMES = {'10c4:ea60': 'CP210x USB to UART', '1a86:7523': 'CH340 USB to serial', '1a86:55d4': 'CH9102 USB to serial',
+                   '303a:1001': 'Built-in USB (ESP32-C3/S3)', '0403:6001': 'FTDI USB to serial'};
+
+let port = null, link = null, busy = false;
+let info = null;          // the firmware's "info" event, or null when it is not our firmware
+let boardStatus = null;   // the latest "status" event
+let registered = null;    // this board's entry in the account's clients
+let firmware = {chips: {}};
+let typedPass = null;      // the Wi-Fi password typed on this visit; kept only in memory
+let secureNetworks = {};   // from the last scan: name → needs a password
+$('#server').value = location.origin;
+
+// ---------- Log ----------
+const logLines = [];
+function log(text) {
+  logLines.push(text.replace(/\x1b\[[0-9;]*m/g, ''));
+  if (logLines.length > 600) logLines.splice(0, logLines.length - 500);
+  const el = $('#log'), atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+  el.textContent = logLines.join('\n');
+  if (atEnd) el.scrollTop = el.scrollHeight;
+}
+// Messages go to the step on screen: the big line while installing, a note otherwise.
+function stage(text, error = false) {
+  const el = step === 'install' ? $('#stage') : $(`#msg${step[0].toUpperCase()}${step.slice(1)}`);
+  el.textContent = text;
+  el.classList.toggle('error', error);
+}
+// null: working, no known progress (spinner); 0–1: installing; 'ok' / 'bad': finished.
+function progress(value) {
+  const ring = $('#ring');
+  ring.classList.toggle('busy', value === null);
+  ring.classList.toggle('ok', value === 'ok');
+  ring.classList.toggle('bad', value === 'bad');
+  const fraction = typeof value === 'number' ? value : 0;
+  ring.style.setProperty('--p', Math.round(fraction * 100));
+  $('#ringText').innerHTML = value === 'ok' ? '<svg class="i" viewBox="0 0 24 24" style="width:44px;height:44px;color:#5fd08f"><path d="M20 6 9 17l-5-5"/></svg>'
+    : value === 'bad' ? '<svg class="i" viewBox="0 0 24 24" style="width:44px;height:44px;color:#ff8a8d"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+    : typeof value === 'number' ? `${Math.round(fraction * 100)}%` : '';
+}
+
+// ---------- Steps ----------
+const STEPS = ['connect', 'wifi', 'install', 'pair'];
+let step = 'connect';
+const reached = new Set(['connect']);
+function go(next) {
+  step = next;
+  reached.add(next);
+  document.querySelectorAll('[data-step]').forEach(p => p.hidden = p.dataset.step !== next);
+  renderStepper();
+  window.scrollTo({top: 0});
+}
+function allowed(s) {
+  return !busy && (s === 'connect' || (s === 'wifi' && !!port) || (s !== 'wifi' && reached.has(s)));
+}
+function renderStepper() {
+  const at = STEPS.indexOf(step);
+  document.querySelectorAll('[data-go]').forEach(b => {
+    const i = STEPS.indexOf(b.dataset.go);
+    if (i === at) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    b.dataset.state = i < at || (b.dataset.go === 'install' && reached.has('pair')) ? 'done' : '';
+    b.disabled = i !== at && !allowed(b.dataset.go);
+  });
+}
+
+// ---------- Serial link to the firmware: JSON commands, "@vk {json}" events ----------
+class Link {
+  constructor(port) { this.port = port; this.waiters = new Set(); this.closed = false; }
+  async open() {
+    await this.port.open({baudRate: 115200, bufferSize: 16384});
+    // Both lines released: on dev boards they drive EN (reset) and GPIO0 (boot mode).
+    try { await this.port.setSignals({dataTerminalReady: false, requestToSend: false}); } catch {}
+    this.reading = this.readLoop();
+  }
+  async readLoop() {
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (this.port.readable && !this.closed) {
+      this.reader = this.port.readable.getReader();
+      try {
+        for (;;) {
+          const {value, done} = await this.reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, {stream: true});
+          let i;
+          while ((i = buffer.indexOf('\n')) >= 0) {
+            this.line(buffer.slice(0, i).replace(/\r$/, ''));
+            buffer = buffer.slice(i + 1);
+          }
+          if (buffer.length > 20000) buffer = '';
+        }
+      } catch (e) {
+        // Break and framing errors while the board resets are harmless: the
+        // port hands out a new stream. Unplugging ends it (readable is null).
+        if (!this.closed) log(`(serial ${e.name}: ${e.message})`);
+      } finally { this.reader.releaseLock(); }
+    }
+    if (!this.closed) onLinkLost();
+  }
+  line(text) {
+    if (!text.startsWith('@vk ')) { if (text.trim()) log(text); return; }
+    let event;
+    try { event = JSON.parse(text.slice(4)); } catch { return; }
+    if (event.ev === 'status') renderStatus(event);
+    if (event.ev === 'info') { info = event; renderBoard(); }
+    if (event.ev === 'error') log(`! ${event.cmd || 'command'}: ${event.msg}`);
+    for (const w of [...this.waiters]) if (w.match(event)) { this.waiters.delete(w); w.resolve(event); }
+  }
+  async send(command) {
+    const writer = this.port.writable.getWriter();
+    try { await writer.write(new TextEncoder().encode(JSON.stringify(command) + '\n')); }
+    finally { writer.releaseLock(); }
+  }
+  wait(match, ms) {
+    return new Promise((resolve, reject) => {
+      const w = {match, resolve};
+      this.waiters.add(w);
+      setTimeout(() => { if (this.waiters.delete(w)) reject(new Error('timeout')); }, ms);
+    });
+  }
+  // Sends a command and resolves with its reply: "ok", "error" (rejects), or the named event.
+  async request(command, ms = 5000, ev = null) {
+    const reply = this.wait(e => (ev && e.ev === ev) || ((e.ev === 'ok' || e.ev === 'error') && e.cmd === command.cmd), ms);
+    await this.send(command);
+    const event = await reply;
+    if (event.ev === 'error') throw new Error(event.msg);
+    return event;
+  }
+  async close() {
+    this.closed = true;
+    try { await this.reader?.cancel(); } catch {}
+    try { await this.reading; } catch {}
+    try { await this.port.close(); } catch {}
+  }
+}
+
+// Asks the firmware for its info for a few seconds (it may be booting); null if it never answers.
+async function probe(ms = 4000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until && link && !link.closed) {
+    try { return await link.request({cmd: 'info'}, 800, 'info'); } catch {}
+  }
+  return null;
+}
+
+// ---------- Account ----------
+async function api(url, options = {}) {
+  const r = await fetch(url, {...options, headers: options.body ? {'Content-Type': 'application/json'} : {}});
+  if (r.status === 401) { $('#signin').hidden = false; throw new Error('Sign in first'); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `${url}: HTTP ${r.status}`);
+  return r.json();
+}
+async function findRegistered() {
+  registered = null;
+  if (!info?.mac) return;
+  try { registered = (await api('/api/status')).devices.find(d => d.mac === info.mac) || null; } catch {}
+}
+
+// ---------- Board ----------
+function portName(p) {
+  const i = p.getInfo(), key = `${(i.usbVendorId || 0).toString(16).padStart(4, '0')}:${(i.usbProductId || 0).toString(16).padStart(4, '0')}`;
+  return USB_NAMES[key] || (i.usbVendorId ? `USB device ${key}` : 'Serial port');
+}
+function chipLabel() {
+  return info ? `${info.chip.toUpperCase().replace('ESP32C3', 'ESP32-C3')} v${Math.floor(info.revision / 100)}.${info.revision % 100}` : '';
+}
+function renderBoard() {
+  const facts = $('#boardFacts'), rows = [];
+  if (port) rows.push(['Port', portName(port)]);
+  if (info) {
+    rows.push(['Chip', chipLabel()], ['MAC', info.mac],
+              ['Firmware', `Voice Keyboard ${info.version}`]);
+    if (registered) rows.push(['Registered as', registered.name + (registered.description ? ` · ${registered.description}` : '')]);
+    else if (info.configured) rows.push(['Registered as', 'not in your account']);
+  } else if (port) rows.push(['Firmware', 'none found (new board, or other firmware)']);
+  facts.replaceChildren(...rows.flatMap(([k, v]) => [Object.assign(document.createElement('dt'), {textContent: k}),
+                                                     Object.assign(document.createElement('dd'), {textContent: v})]));
+  $('#boardCard').hidden = !rows.length;
+  $('#connect').hidden = !!port;
+  $('#connect').disabled = busy || !('serial' in navigator);
+  $('#toWifi').hidden = !port;
+  $('#toWifi').disabled = busy;
+  $('#disconnect').hidden = !port || busy;
+  $('#portHelp').hidden = !!port;
+  $('#boardLine').textContent = !info ? 'New board: the firmware is installed first'
+    : [chipLabel(), info.mac, registered ? `registered as ${registered.name}` : `firmware ${info.version}`].join(' · ');
+  $('#scan').disabled = busy || !info;
+  document.querySelectorAll('[data-cmd]').forEach(b => b.disabled = busy || !info);
+  $('#strip').hidden = !info;
+  renderInstall();
+  renderStepper();
+}
+function renderInstall() {
+  const chip = info && firmware.chips[info.chip], latest = chip?.version;
+  const current = info && latest && info.version === latest;
+  $('#install').disabled = busy || !port;
+  $('#applyOnly').hidden = !info;
+  $('#applyOnly').disabled = busy;
+  $('#install').textContent = !info ? 'Install and set up' : current ? 'Reinstall and set up' : 'Update firmware and set up';
+  $('#install').classList.toggle('secondary', !!current);
+  $('#applyOnly').classList.toggle('secondary', !current);
+  $('#installHint').textContent = !port ? 'Connect a board first.'
+    : !info ? 'About a minute.'
+    : current ? `Latest firmware (${latest}) installed.`
+    : latest ? `Update ${info.version} → ${latest}; settings are kept.`
+    : '';
+  if (!Object.keys(firmware.chips).length && port)
+    $('#installHint').textContent += ' This server has no firmware published yet, so only saving settings to a board that already has it works.';
+}
+function fillFromBoard() {
+  if (!info) return;
+  if (!$('#ssid').value) $('#ssid').value = info.ssid || '';
+  if (!$('#btName').value) $('#btName').value = registered?.name || info.name || '';
+  if (!$('#desc').value && registered) $('#desc').value = registered.description || '';
+  if (info.server && info.server !== location.origin && $('#server').value === location.origin) $('#server').value = info.server;
+  $('#pass').placeholder = info.has_pass && info.ssid ? 'Leave empty to keep the saved password' : 'Leave empty for an open network';
+  $('#erase').checked = false;
+}
+
+async function openLink(p) {
+  link = new Link(p);
+  await link.open();
+}
+async function connect() {
+  let chosen;
+  try { chosen = await navigator.serial.requestPort(); } catch { return; }  // dialog cancelled
+  await attach(chosen);
+}
+async function attach(p) {
+  await detach();
+  port = p;
+  busy = true; renderBoard();
+  stage('Looking for the Voice Keyboard firmware…');
+  try {
+    await openLink(port);
+    info = await probe();
+    if (!port.readable) throw Object.assign(new Error(serialLost()), {lost: true});
+    await findRegistered();
+    stage('');
+    if (!info) $('#erase').checked = true;
+    fillFromBoard();
+    if (info) link.send({cmd: 'status'});
+    busy = false;
+    if (step === 'connect') go('wifi');
+  } catch (e) {
+    stage(e.lost ? e.message : `Could not open the port: ${e.message}. Close other programs using it (Arduino IDE, serial monitors, other tabs).`, true);
+    try { await link?.close(); } catch {}
+    port = null; link = null;
+  } finally { busy = false; renderBoard(); }
+}
+async function detach() {
+  const l = link; link = null;
+  if (l) await l.close();
+  port = null; info = null; boardStatus = null; registered = null;
+}
+function onLinkLost() {
+  if (busy) return;  // flashing resets the board on purpose
+  link = null; port = null; info = null;
+  go('connect');
+  stage(serialLost(), true);
+  renderBoard();
+}
+// On Linux, a program that used the port before (Arduino IDE, esptool, a serial
+// monitor) can leave it set up so that Chrome reports it lost right away.
+function serialLost() {
+  return /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
+    ? 'The board was disconnected. If it is still plugged in, another program probably changed the port settings: unplug the board, plug it in again, and reload this page.'
+    : 'The board was disconnected.';
+}
+
+// After a reset, a board with built-in USB (most C3) disappears and comes back
+// as a new port; boards with a USB-to-serial chip keep theirs.
+async function reacquire(old, ms = 20000) {
+  const want = old.getInfo(), until = Date.now() + ms;
+  while (Date.now() < until) {
+    const ports = await navigator.serial.getPorts();
+    const candidates = [old, ...ports.filter(p => p !== old && p.getInfo().usbVendorId === want.usbVendorId
+                                                  && p.getInfo().usbProductId === want.usbProductId)];
+    for (const p of candidates) {
+      try { await openLink(p); return p; } catch { link = null; }
+    }
+    await sleep(500);
+  }
+  throw new Error('the board did not come back after restarting. Unplug it, plug it in again, and choose "Save settings only"');
+}
+
+// ---------- Wi-Fi scan ----------
+async function scan() {
+  const button = $('#scan'), list = $('#networks');
+  button.disabled = true; button.querySelector('svg').classList.add('spin');
+  try {
+    const {networks} = await link.request({cmd: 'scan'}, 20000, 'scan');
+    for (const n of networks) secureNetworks[n.ssid] = n.secure;
+    list.replaceChildren(...networks.map(n => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = `<span class="ssid"></span><span class="sig"></span>`;
+      b.querySelector('.ssid').textContent = (n.secure ? '🔒 ' : '') + n.ssid;
+      b.querySelector('.sig').textContent = `${n.rssi} dBm`;
+      b.onclick = () => { $('#ssid').value = n.ssid; list.hidden = true; $('#pass').focus(); };
+      return b;
+    }));
+    if (!networks.length) list.replaceChildren(Object.assign(document.createElement('p'), {className: 'hint', textContent: 'No 2.4 GHz networks found.'}));
+    list.hidden = false;
+  } catch (e) { stage(`Wi-Fi scan failed: ${e.message}`, true); }
+  finally { button.querySelector('svg').classList.remove('spin'); renderBoard(); }
+}
+
+// ---------- Install ----------
+function validate() {
+  const ssid = $('#ssid').value.trim(), name = $('#btName').value.trim(), server = $('#server').value.trim().replace(/\/+$/, '');
+  if (!ssid) return ['Enter the Wi-Fi network.', '#ssid'];
+  if (new TextEncoder().encode(ssid).length > 32) return ['The Wi-Fi name is too long.', '#ssid'];
+  const pass = $('#pass').value;
+  if (pass && (pass.length < 8 || pass.length > 64)) return ['A Wi-Fi password has 8 to 64 characters.', '#pass'];
+  if (!name) return ['Enter a name.', '#btName'];
+  if (new TextEncoder().encode(name).length > 29) return ['The name is too long for Bluetooth (29 bytes at most).', '#btName'];
+  if (!/^https?:\/\/[^/\s]+$/.test(server)) return ['The server address must look like https://host or https://host:port.', '#server'];
+  return null;
+}
+
+// Writes the settings and follows the board until it is connected to this server.
+async function configure() {
+  const server = $('#server').value.trim().replace(/\/+$/, '');
+  const [settings, enroll] = await Promise.all([api('/api/settings'), api('/api/enroll')]);
+  let ca = null;
+  // Caddy's local CA: the board must trust it like the desktop clients do.
+  if (settings.localCa && server.startsWith('https://')) {
+    const r = await fetch(new URL('/ca.crt', location.origin));
+    const text = r.ok ? await r.text() : '';
+    if (text.includes('BEGIN CERTIFICATE')) ca = text.trim();
+  }
+  const ssid = $('#ssid').value.trim(), pass = $('#pass').value || (typedPass?.ssid === ssid ? typedPass.pass : '');
+  const command = {cmd: 'config', ssid, server, name: $('#btName').value.trim(), ca};
+  // Keep the saved password when the network is unchanged and nothing new was typed.
+  if (pass || !(info?.has_pass && info.ssid === ssid)) command.pass = pass;
+  if (!command.pass && command.pass !== undefined && secureNetworks[ssid])
+    throw new Error(`“${ssid}” needs a password. Choose Change settings and enter it`);
+  if (pass) typedPass = {ssid, pass};  // an erase or a reinstall on this visit reuses it
+  // A paired board keeps its own credential; the install token is only for pairing.
+  if (!info?.has_token || info.server !== server || boardStatus?.server === 'rejected') command.token = enroll.token;
+  stage('Saving the settings on the board…');
+  boardStatus = null;  // only what the board reports from now on counts
+  let restarted = false;  // a Wi-Fi failure counts only after it tried the new settings
+  link.wait(e => e.ev === 'status' && e.wifi === 'connecting', 60000).then(() => restarted = true, () => {});
+  await link.request(command, 8000);
+  $('#pass').value = '';
+  // The board reconnects with the new settings; let it drop the old connection first.
+  await sleep(1500);
+  await link.request({cmd: 'status'}, 3000, 'status').catch(() => {});
+
+  stage('Waiting for the board to join Wi-Fi and reach this server…');
+  const until = Date.now() + 60000;
+  while (Date.now() < until) {
+    const s = boardStatus || {};
+    if (s.server === 'connected' && s.device) break;
+    if (s.wifi === 'failed' && restarted) throw new Error(`Wi-Fi: ${s.wifi_error || 'could not connect'}. Check the network name and password.`);
+    if (s.server === 'rejected') throw new Error('The server refused the board. Try again; if it keeps happening, create a new install command in Settings → Clients.');
+    await sleep(500);
+  }
+  const s = boardStatus || {};
+  if (s.server !== 'connected') {
+    const why = s.wifi !== 'connected' ? `Wi-Fi: ${s.wifi_error || 'still connecting'}` : `server: ${s.server_error || 'still connecting'}`;
+    throw new Error(`The board did not connect (${why}). It keeps retrying; the status is at the top.`);
+  }
+  await api(`/api/devices/${s.device}`, {method: 'PATCH', body: JSON.stringify({name: $('#btName').value.trim(), description: $('#desc').value.trim()})});
+  info = await probe(3000) || info;
+  await findRegistered();
+  renderBoard();
+}
+
+async function flash() {
+  const erase = $('#erase').checked;
+  await link.close(); link = null;
+  const transport = new Transport(port, false);
+  const loader = new ESPLoader({transport, baudrate: 460800, romBaudrate: 115200, terminal: {
+    clean() {}, writeLine: log, write: log,
+  }});
+  let chipName;
+  try {
+    stage('Starting the board in download mode…');
+    try {
+      await loader.main();
+    } catch (e) {
+      $('#bootHelp').hidden = false;
+      throw new Error(`the board did not enter download mode (${e.message})`);
+    }
+    $('#bootHelp').hidden = true;
+    chipName = loader.chip.CHIP_NAME;
+    const chip = CHIPS[chipName], build = firmware.chips[chip];
+    if (!chip) throw new Error(`this is an ${chipName}. Voice Keyboard runs on ESP32 and ESP32-C3 boards${chipName === 'ESP32-S2' ? ' (the S2 has no Bluetooth)' : ''}`);
+    if (!build) throw new Error(`this server has no ${chipName} firmware yet (run tools/release.sh)`);
+    stage(`Downloading the ${chipName} firmware…`);
+    const r = await fetch(build.url, {cache: 'no-store'});
+    if (!r.ok) throw new Error(`could not download the firmware (HTTP ${r.status})`);
+    const data = new Uint8Array(await r.arrayBuffer());
+    stage(erase ? 'Erasing the board, then installing…' : `Installing firmware ${build.version}…`);
+    progress(0);
+    // The merged image covers the settings (NVS, 0x9000–0xF000) and radio
+    // calibration (0xF000) with blank bytes. An update skips them, which keeps
+    // the Wi-Fi settings, the pairing with this server and the Bluetooth bonds.
+    const files = erase ? [{data, address: 0}]
+      : [{data: data.slice(0, NVS_START), address: 0}, {data: data.slice(APP_START), address: APP_START}];
+    await loader.writeFlash({
+      fileArray: files, flashMode: 'keep', flashFreq: 'keep', flashSize: 'keep',
+      eraseAll: erase, compress: true,
+      reportProgress: (i, written, total) => { stage(`Installing firmware ${build.version}…`); progress(files.length === 1 ? written / total : i === 0 ? 0.02 * written / total : 0.02 + 0.98 * written / total); },
+    });
+    progress(1);
+  } finally {
+    // Back to normal mode in every case, so a failed attempt leaves the board running.
+    stage('Restarting the board…');
+    try { await loader.after('hard_reset'); } catch {}
+    try { await transport.disconnect(); } catch {}
+  }
+  await sleep(1200);
+  port = await reacquire(port);
+  info = await probe(8000);
+  if (!info) throw new Error('the firmware did not start. Press the RESET button on the board, then choose "Save settings only"');
+  $('#erase').checked = false;  // the next install is an update that keeps the settings
+  log(`Installed Voice Keyboard ${info.version} on ${chipName}`);
+}
+
+let lastInstall = true;  // with firmware, for "Try again"
+async function install(withFirmware) {
+  const invalid = validate();
+  if (invalid) { stage(invalid[0], true); $(invalid[1]).focus(); return; }
+  lastInstall = withFirmware;
+  $('#msgWifi').textContent = '';
+  $('#installActions').hidden = true;
+  $('#bootHelp').hidden = true;
+  go('install');
+  busy = true; renderBoard(); progress(null);
+  try {
+    if (withFirmware) {
+      if (!Object.keys(firmware.chips).length) throw new Error('this server has no firmware published yet (run tools/release.sh)');
+      await flash();
+      progress(null);
+    }
+    await configure();
+    progress('ok');
+    stage(`“${$('#btName').value.trim()}” is set up`);
+    $('#pairName').textContent = $('#btName').value.trim();
+    busy = false;
+    await sleep(1200);
+    go('pair');
+  } catch (e) {
+    progress('bad');
+    stage(e.message.replace(/^./, c => c.toUpperCase()), true);
+    log(`! ${e.message}`);
+    $('#installActions').hidden = false;
+    if (!link && port) {  // reopen for logs and a retry
+      try { await openLink(port); info = await probe(3000); } catch { link = null; }
+    }
+  } finally { busy = false; renderBoard(); }
+}
+
+// ---------- Status ----------
+// A pill: state, a short label, and the details as its tooltip.
+function pill(id, state, text, detail) {
+  const el = $(id);
+  el.dataset.state = state;
+  el.querySelector('span').textContent = text;
+  el.title = detail;
+}
+function renderStatus(s) {
+  boardStatus = s;
+  const wifi = {connected: ['ok', `${s.rssi} dBm`, `Wi-Fi: ${info?.ssid || 'connected'}, ${s.rssi} dBm, ${s.ip}`],
+                connecting: ['wait', 'Wi-Fi…', s.wifi_error ? `Wi-Fi: retrying (${s.wifi_error})` : 'Wi-Fi: connecting'],
+                failed: ['bad', 'Wi-Fi', `Wi-Fi: ${s.wifi_error || 'could not connect'}`], off: ['', 'No Wi-Fi', 'Wi-Fi: not set up']}[s.wifi] || ['', s.wifi, s.wifi];
+  pill('#stWifi', ...wifi);
+  const server = {connected: ['ok', s.selected ? 'Active' : 'Online', s.selected ? 'Server: connected, the active client (types your dictation)' : 'Server: connected; another client is active'],
+                  connecting: ['wait', 'Server…', 'Server: connecting'], error: ['bad', 'Server', `Server: ${s.server_error || 'error'}`],
+                  rejected: ['bad', 'Removed', `Server: ${s.server_error}`], off: ['', 'Server', 'Server: not set up']}[s.server] || ['', s.server, s.server];
+  pill('#stServer', ...server);
+  const ble = {connected: ['ok', 'Paired', `Bluetooth: connected to ${s.ble_peer || 'a device'}`],
+               advertising: ['wait', 'Pairable', `Bluetooth: ready to pair as “${info?.name || ''}”`],
+               starting: ['wait', 'BT…', 'Bluetooth: starting']}[s.ble] || ['', s.ble, s.ble];
+  pill('#stBle', ...ble);
+  $('#makeActive').hidden = !(s.server === 'connected' && !s.selected && s.device);
+  $('#testType').disabled = s.ble !== 'connected';
+  $('#testType').textContent = s.ble === 'connected' ? 'Type a test' : 'Waiting for a paired device…';
+}
+
+// ---------- Wiring ----------
+$('#connect').onclick = connect;
+$('#toWifi').onclick = () => go('wifi');
+$('#disconnect').onclick = async () => { await detach(); stage(''); renderBoard(); };
+$('#retry').onclick = () => install(lastInstall);
+$('#backToWifi').onclick = () => go('wifi');
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { if (allowed(b.dataset.go)) go(b.dataset.go); });
+$('#showPass').onclick = () => { const p = $('#pass'); p.type = p.type === 'password' ? 'text' : 'password'; };
+$('#openTools').onclick = () => { $('#tools').showModal(); $('#log').scrollTop = $('#log').scrollHeight; };
+$('#closeTools').onclick = () => $('#tools').close();
+$('#tools').onclick = e => { if (e.target === $('#tools')) $('#tools').close(); };  // tap outside
+$('#scan').onclick = scan;
+$('#install').onclick = () => install(true);
+$('#applyOnly').onclick = () => install(false);
+$('#testType').onclick = () => link?.request({cmd: 'type', text: 'Hello from Voice Keyboard! '}).catch(e => stage(e.message, true));
+$('#makeActive').onclick = async () => {
+  try { await api(`/api/devices/${boardStatus.device}/select`, {method: 'POST'}); link?.send({cmd: 'status'}); }
+  catch (e) { stage(e.message, true); }
+};
+document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = async () => {
+  const cmd = b.dataset.cmd;
+  if (cmd === 'erase' && !confirm('Erase all settings on the board? It forgets the Wi-Fi, this server and every paired device.')) return;
+  if (cmd === 'forget_bt' && !confirm('Forget every paired device? Remove the board from their Bluetooth settings too, then pair again.')) return;
+  try {
+    await link.request({cmd});
+    if (cmd === 'reboot' || cmd === 'erase') {
+      $('#tools').close();
+      busy = true; renderBoard(); stage('Restarting the board…');
+      await link.close(); link = null;
+      await sleep(1500);
+      port = await reacquire(port);
+      info = await probe(6000);
+      if (cmd === 'erase') for (const id of ['#ssid', '#btName', '#desc']) $(id).value = '';
+      await findRegistered(); fillFromBoard(); stage('');
+    }
+  } catch (e) { stage(e.message, true); }
+  finally { busy = false; renderBoard(); }
+});
+
+if (!('serial' in navigator)) {
+  $('#unsupported').hidden = false;
+  $('#unsupported').textContent = window.isSecureContext
+    ? 'This browser cannot talk to USB devices. Open this page in Chrome or Edge on a computer (Chrome on Android can too, with a USB-C or OTG cable, in recent versions).'
+    : 'This page needs HTTPS to talk to USB devices. Open it through the https:// address of this server.';
+} else {
+  // A board this site was allowed to use before, when it is plugged in.
+  navigator.serial.addEventListener('connect', e => { if (!port && !busy) attach(e.target); });
+}
+try { firmware = await api('/api/firmware'); } catch {}
+progress(null);
+renderBoard();
+// Already plugged in and allowed on an earlier visit: no need to pick it again.
+if ('serial' in navigator) {
+  const granted = await navigator.serial.getPorts();
+  if (granted.length === 1 && !port) attach(granted[0]);
+}
+</script>
+</body>
+</html>

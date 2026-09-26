@@ -356,17 +356,27 @@ async def web_ui():
     return HTMLResponse(WEB_SOURCE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/esp32", include_in_schema=False)
+async def esp32_setup_page():
+    """Sets up an ESP32 board from the browser: flashes it over Web Serial, then configures it."""
+    return HTMLResponse((WEB_SOURCE.parent / "esp32.html").read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-cache"})
+
+
 # Icons for tabs, bookmarks and home-screen shortcuts; fixed names only.
 WEB_ASSETS = {"favicon.ico": ("icons/favicon.ico", "image/x-icon"),
               "manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
               **{f"icons/{name}": (f"icons/{name}", kind) for name, kind in (
                   ("icon.svg", "image/svg+xml"), ("icon-32.png", "image/png"), ("icon-192.png", "image/png"),
-                  ("icon-512.png", "image/png"), ("apple-touch-icon.png", "image/png"))}}
+                  ("icon-512.png", "image/png"), ("apple-touch-icon.png", "image/png"))},
+              # Espressif's flasher (Apache-2.0), vendored so /esp32 works without internet access.
+              "vendor/esptool-js-0.7.0.mjs": ("vendor/esptool-js-0.7.0.mjs", "text/javascript")}
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 @app.get("/manifest.webmanifest", include_in_schema=False)
 @app.get("/icons/{name}", include_in_schema=False)
+@app.get("/vendor/{name}", include_in_schema=False)
 async def web_asset(request: Request):
     asset = WEB_ASSETS.get(request.url.path.lstrip("/"))
     if not asset:
@@ -378,8 +388,12 @@ async def web_asset(request: Request):
 # Desktop client: one self-contained binary per OS/CPU, fetched by /client/install.*
 DESKTOP_BINARIES = [f"vkeyboard-{os_}-{arch}{'.exe' if os_ == 'windows' else ''}"
                     for os_ in ("linux", "darwin", "windows") for arch in ("amd64", "arm64")]
+# ESP32 firmware: one merged image per chip, flashed at 0x0 by the /esp32 page.
+FIRMWARE_CHIPS = {"esp32": "ESP32", "esp32c3": "ESP32-C3"}
+FIRMWARE_BINARIES = [f"vkeyboard-{chip}.bin" for chip in FIRMWARE_CHIPS]
 # Release asset -> (directory under RELEASES_DIR, media type).
-RELEASE_FILES = {name: ("desktop", "application/octet-stream") for name in DESKTOP_BINARIES}
+RELEASE_FILES = {name: ("desktop", "application/octet-stream") for name in DESKTOP_BINARIES} | {
+    name: ("firmware", "application/octet-stream") for name in FIRMWARE_BINARIES}
 
 
 def release_path(filename: str) -> Path | None:
@@ -449,9 +463,18 @@ async def sync_releases_forever():
         await asyncio.sleep(RELEASE_SYNC_SECONDS)
 
 
+def device_mac(machine_id: str) -> str | None:
+    """ESP32 boards identify as esp32-<MAC>; shown so identical boards can be told apart."""
+    hex_ = machine_id.removeprefix("esp32-")
+    if hex_ == machine_id or len(hex_) != 12:
+        return None
+    return ":".join(hex_[i:i + 2] for i in range(0, 12, 2)).upper()
+
+
 def device_json(device, room: "Room", selected_id) -> dict:
-    return {"id": device["id"], "name": device["name"], "platform": device["platform"],
-            "version": device["version"], "online": device["id"] in room.devices,
+    return {"id": device["id"], "name": device["name"], "description": device["description"],
+            "platform": device["platform"], "version": device["version"], "mac": device_mac(device["machine_id"]),
+            "online": device["id"] in room.devices,
             "selected": device["id"] == selected_id, "lastSeen": device["last_seen"]}
 
 
@@ -476,11 +499,19 @@ async def select_device(device_id: int, request: Request):
 
 @app.patch("/api/devices/{device_id}")
 async def rename_device(device_id: int, request: Request):
+    """Changes the name and/or the description; a field left out is kept."""
     user = require_user(request)
-    name = str((await request.json()).get("name") or "").strip()[:80]
-    if not name or not store.device(user["id"], device_id):
+    body = await request.json()
+    changes = {}
+    if "name" in body:
+        changes["name"] = str(body.get("name") or "").strip()[:80]
+        if not changes["name"]:
+            raise HTTPException(400, "The name cannot be empty")
+    if "description" in body:
+        changes["description"] = str(body.get("description") or "").strip()[:200]
+    if not changes or not store.device(user["id"], device_id):
         raise HTTPException(400, "Invalid name or client")
-    store.update_device(device_id, name=name)
+    store.update_device(device_id, **changes)
     room_for(user).broadcast({"type": "devices"})
     return {"ok": True}
 
@@ -653,12 +684,37 @@ async def install_ps1():
 
 @app.get("/client/{name}", include_in_schema=False)
 async def client_binary(name: str):
-    if name not in DESKTOP_BINARIES:
+    if name not in RELEASE_FILES:
         raise HTTPException(404, "Unknown client build")
     path = release_path(name)
     if not path:
-        raise HTTPException(404, "Desktop client not published yet; run tools/release.sh")
-    return FileResponse(path, media_type="application/octet-stream", filename=name)
+        raise HTTPException(404, "Client not published yet; run tools/release.sh")
+    return FileResponse(path, media_type="application/octet-stream", filename=name,
+                        headers={"Cache-Control": "no-cache"})
+
+
+def firmware_version(path: Path) -> str:
+    """The version compiled into a merged image: the app (at 0x10000) starts with
+    a 24-byte image header and an 8-byte segment header, then esp_app_desc_t."""
+    with path.open("rb") as f:
+        f.seek(0x10000 + 32)
+        desc = f.read(48)
+    if len(desc) < 48 or int.from_bytes(desc[:4], "little") != 0xABCD5432:
+        return ""
+    return desc[16:48].split(b"\0", 1)[0].decode("ascii", "replace")
+
+
+@app.get("/api/firmware")
+async def firmware_info(request: Request):
+    """The ESP32 firmware this server can flash, per chip, for the /esp32 page."""
+    require_user(request)
+    chips = {}
+    for chip, label in FIRMWARE_CHIPS.items():
+        name = f"vkeyboard-{chip}.bin"
+        if path := release_path(name):
+            chips[chip] = {"label": label, "url": f"/client/{name}", "size": path.stat().st_size,
+                           "version": firmware_version(path)}
+    return {"chips": chips}
 
 
 @app.websocket("/v1/keyboard")

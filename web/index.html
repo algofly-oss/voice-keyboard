@@ -223,6 +223,9 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .code-meta{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .steps .hint code{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:1px 5px;border-radius:4px;background:var(--elevated);color:var(--muted)}
 .device-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.esp32-link{color:inherit;text-decoration:none;transition:border-color .15s}
+.esp32-link:hover{border-color:var(--accent)}
+.esp32-link svg.i{color:var(--muted)}
 .device-list li.empty{color:var(--subtle);font-size:14px}
 .device{display:flex;align-items:center;gap:6px}
 .field[hidden],.callout[hidden]{display:none}
@@ -241,6 +244,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .device-pick .text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .device-pick .title{font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .device-pick .hint{font-size:12px}
+.device-pick .desc{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.device-pick .text.editing{gap:6px}
 .device-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--subtle)}
 .device-dot.on{background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
 .device-tag{flex:none;font-size:11px;font-weight:700;color:#a5adff;background:var(--accent-soft);padding:2px 7px;border-radius:999px}
@@ -417,6 +422,10 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
                 <p class="hint">It runs in the background, starts at every login, and types into the focused window. On macOS, allow it under Privacy &amp; Security → Accessibility when asked. Manage it with <code>vkeyboard status</code>, <code>stop</code> and <code>start</code>.</p></li>
             </ol>
           </div>
+          <a class="group esp32-link" href="/esp32">
+            <div class="group-head"><h3>Add an ESP32 board</h3><i data-i="right"></i></div>
+            <p class="hint">Turns an ESP32 or ESP32-C3 into a Bluetooth keyboard that types into any computer, tablet or phone, with nothing to install there. Set up from this browser over USB.</p>
+          </a>
         </div>
       </section>
 
@@ -863,10 +872,11 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
       const seen=d.online?'Online':d.lastSeen?'Last seen '+new Date(d.lastSeen*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'Never connected';
       li.innerHTML=`<div class="device-pick" role="button" tabindex="0" aria-pressed="${d.selected}" aria-label="Make this the active client"><span class="device-dot${d.online?' on':''}"></span>`+
         `<span class="text"><span class="title"></span><span class="hint"></span></span>${d.selected?'<span class="device-tag">Active</span>':''}</div>`+
-        `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename">${svg('edit')}</button>`+
+        `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename or describe">${svg('edit')}</button>`+
         `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;
       li.querySelector('.title').textContent=d.name;
-      li.querySelector('.hint').textContent=[d.platform,d.version&&'v'+d.version,seen].filter(Boolean).join(' · ');
+      li.querySelector('.hint').textContent=[d.platform,d.version&&'v'+d.version,d.mac,seen].filter(Boolean).join(' · ');
+      if(d.description)li.querySelector('.title').after(Object.assign(document.createElement('span'),{className:'desc',textContent:d.description}));
       const pick=li.querySelector('.device-pick'),select=()=>{if(renaming===null&&!d.selected)deviceAction('POST',`/api/devices/${d.id}/select`)};
       pick.onclick=select;
       pick.onkeydown=e=>{if(e.target===pick&&(e.key==='Enter'||e.key===' ')){e.preventDefault();select()}};
@@ -876,21 +886,26 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
       return li}));
     $('#clientCount').textContent=devices.length;$('#clientCount').classList.toggle('on',devices.some(d=>d.online));
   };
-  // Turns the client's name into a text field in place: Enter or leaving it saves, Esc cancels.
+  // Turns the client's name and description into text fields in place: Enter or leaving them saves, Esc cancels.
   function renameInline(li,d){
     if(renaming!==null)return;
     renaming=d.id;
-    const title=li.querySelector('.title'),input=document.createElement('input');
-    Object.assign(input,{type:'text',value:d.name,maxLength:80,className:'device-name'});
-    input.setAttribute('aria-label','Client name');
-    title.replaceWith(input);input.focus();input.select();
+    const text=li.querySelector('.text'),field=(value,max,label,placeholder)=>{
+      const input=Object.assign(document.createElement('input'),{type:'text',value,maxLength:max,className:'device-name',placeholder});
+      input.setAttribute('aria-label',label);return input};
+    const name=field(d.name,80,'Client name',''),desc=field(d.description||'',200,'Description','Description (optional)');
+    text.replaceChildren(name,desc);text.classList.add('editing');name.focus();name.select();
     let done=false;
     const finish=save=>{if(done)return;done=true;renaming=null;
-      const name=input.value.trim();
-      if(save&&name&&name!==d.name)deviceAction('PATCH',`/api/devices/${d.id}`,{name});else pollDevice()};
-    input.onclick=e=>e.stopPropagation();
-    input.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(true)}else if(e.key==='Escape'){e.preventDefault();finish(false)}};
-    input.onblur=()=>finish(true);
+      const changes={};
+      if(name.value.trim()&&name.value.trim()!==d.name)changes.name=name.value.trim();
+      if(desc.value.trim()!==(d.description||''))changes.description=desc.value.trim();
+      if(save&&Object.keys(changes).length)deviceAction('PATCH',`/api/devices/${d.id}`,changes);else pollDevice()};
+    for(const input of [name,desc]){
+      input.onclick=e=>e.stopPropagation();
+      input.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(true)}else if(e.key==='Escape'){e.preventDefault();finish(false)}};
+      input.onblur=e=>{if(e.relatedTarget!==name&&e.relatedTarget!==desc)finish(true)};
+    }
   }
   async function deviceAction(method,url,body){
     const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
