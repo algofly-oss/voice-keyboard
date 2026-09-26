@@ -375,6 +375,9 @@ html.landscape .vk.mic-key{display:flex}
 /* In the compact line: status and text first, then the level bars right next to the microphone. */
 .app.touchpad-on .below>.wave{order:4}
 .app.touchpad-on .below>.mic-mini{order:5}
+/* Dictating: the level bars replace the text, filling the line up to the microphone. */
+.app.touchpad-on.recording .below>:is(.status,.caption){display:none}
+.app.touchpad-on.recording .below>.wave{flex:1;min-width:0;width:auto;justify-content:center;overflow:hidden}
 .app.touchpad-on .wave{width:90px;height:20px}
 .app.touchpad-on .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex:1;min-width:0}
 .app.touchpad-on .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
