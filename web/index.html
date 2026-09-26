@@ -414,6 +414,14 @@ html.landscape .vk.mic-key{display:flex}
 .app.touchpad-on:not(.recording) :is(.wave,.discard),html.landscape .app:not(.recording) :is(.wave,.discard){display:none}
 .app.touchpad-on .status,html.landscape .status{flex:1 1 auto;min-width:0;text-align:center}
 html.landscape .touchpad{display:none}
+/* A tablet held sideways has room above the keyboard: the touchpad goes there
+   (a phone held sideways is too short, and keeps only the keyboard). */
+@media (min-height:600px){
+  html.landscape .app.touchpad-on{grid-template-rows:auto minmax(0,1fr) auto}
+  html.landscape .app.touchpad-on .stage{flex-direction:column;align-items:stretch;gap:8px;padding:4px 0 8px;min-height:0}
+  html.landscape .app.touchpad-on .touchpad{display:grid}
+  html.landscape .app.touchpad-on .stage .below{flex:none}
+}
 
 /* A phone or tablet held sideways: a slim status line, then a full-width
    keyboard with a small microphone key in its toolbar (like Gboard's). */
