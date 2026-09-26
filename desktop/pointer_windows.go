@@ -59,6 +59,18 @@ func (windowsPointer) Click(button string) error {
 	return sendMouse(mouseInput{typ: inputMouse, flags: flags[0]}, mouseInput{typ: inputMouse, flags: flags[1]})
 }
 
+var buttonFlags = map[string][2]uint32{
+	"left": {mouseLeftDown, mouseLeftUp}, "right": {mouseRightDown, mouseRightUp}, "middle": {mouseMiddleDown, mouseMiddleUp},
+}
+
+func (windowsPointer) Press(button string) error {
+	return sendMouse(mouseInput{typ: inputMouse, flags: buttonFlags[button][0]})
+}
+
+func (windowsPointer) Release(button string) error {
+	return sendMouse(mouseInput{typ: inputMouse, flags: buttonFlags[button][1]})
+}
+
 func (windowsPointer) Scroll(dx, dy int) error {
 	var events []mouseInput
 	if dy != 0 { // positive wheel data scrolls up

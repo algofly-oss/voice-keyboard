@@ -74,8 +74,22 @@ func (p *x11Pointer) press(button uint32, times int) {
 	p.xFlush(p.display)
 }
 
+var x11Buttons = map[string]uint32{"left": 1, "middle": 2, "right": 3}
+
 func (p *x11Pointer) Click(button string) error {
-	p.press(map[string]uint32{"left": 1, "middle": 2, "right": 3}[button], 1)
+	p.press(x11Buttons[button], 1)
+	return nil
+}
+
+func (p *x11Pointer) Press(button string) error {
+	p.xTestButton(p.display, x11Buttons[button], 1, 0)
+	p.xFlush(p.display)
+	return nil
+}
+
+func (p *x11Pointer) Release(button string) error {
+	p.xTestButton(p.display, x11Buttons[button], 0, 0)
+	p.xFlush(p.display)
 	return nil
 }
 
@@ -158,13 +172,17 @@ func (p *uinputPointer) rel(pairs ...[2]int) error {
 
 func (p *uinputPointer) Move(dx, dy int) error { return p.rel([2]int{relX, dx}, [2]int{relY, dy}) }
 
+var uinputButtons = map[string]uint16{"left": btnLeft, "right": btnRight, "middle": btnMiddle}
+
 func (p *uinputPointer) Click(button string) error {
-	code := map[string]uint16{"left": btnLeft, "right": btnRight, "middle": btnMiddle}[button]
-	if err := p.dev.key(code, true); err != nil {
+	if err := p.Press(button); err != nil {
 		return err
 	}
-	return p.dev.key(code, false)
+	return p.Release(button)
 }
+
+func (p *uinputPointer) Press(button string) error   { return p.dev.key(uinputButtons[button], true) }
+func (p *uinputPointer) Release(button string) error { return p.dev.key(uinputButtons[button], false) }
 
 // The wheel axis counts up as positive.
 func (p *uinputPointer) Scroll(dx, dy int) error {

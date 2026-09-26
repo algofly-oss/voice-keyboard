@@ -16,6 +16,9 @@ const (
 	cgEventRightMouseDown = 3
 	cgEventRightMouseUp   = 4
 	cgEventMouseMoved     = 5
+	cgEventLeftDragged    = 6
+	cgEventRightDragged   = 7
+	cgEventOtherDragged   = 27
 	cgEventOtherMouseDown = 25
 	cgEventOtherMouseUp   = 26
 	cgScrollEventUnitLine = 1
@@ -28,7 +31,9 @@ var (
 	cgEventCreateScrollWheel2 func(source uintptr, units uint32, wheelCount uint32, wheel1, wheel2, wheel3 int32) uintptr
 )
 
-type macPointer struct{}
+// macPointer remembers a held button: while it is down, motion must be
+// posted as "dragged" events, or apps see a move without a drag.
+type macPointer struct{ down string }
 
 func newPointer() (pointer, error) {
 	if err := load(); err != nil {
@@ -45,7 +50,7 @@ func newPointer() (pointer, error) {
 	if _, err := purego.Dlsym(cg, "CGEventCreateScrollWheelEvent2"); err == nil {
 		purego.RegisterLibFunc(&cgEventCreateScrollWheel2, cg, "CGEventCreateScrollWheelEvent2")
 	}
-	return macPointer{}, nil
+	return &macPointer{}, nil
 }
 
 func location() cgPoint {
@@ -63,33 +68,63 @@ func post(event uintptr) error {
 	return nil
 }
 
-func (macPointer) Move(dx, dy int) error {
+func (p *macPointer) Move(dx, dy int) error {
 	if err := allowed(); err != nil {
 		return err
 	}
-	p := location()
-	p.X += float64(dx)
-	p.Y += float64(dy)
-	return post(cgEventCreateMouseEvent(0, cgEventMouseMoved, p, 0))
+	at := location()
+	at.X += float64(dx)
+	at.Y += float64(dy)
+	kind, button := uint32(cgEventMouseMoved), uint32(0)
+	switch p.down {
+	case "left":
+		kind = cgEventLeftDragged
+	case "right":
+		kind, button = cgEventRightDragged, 1
+	case "middle":
+		kind, button = cgEventOtherDragged, 2
+	}
+	return post(cgEventCreateMouseEvent(0, kind, at, button))
 }
 
-func (macPointer) Click(button string) error {
+func (p *macPointer) Click(button string) error {
 	if err := allowed(); err != nil {
 		return err
 	}
-	types := map[string][3]uint32{
-		"left":   {cgEventLeftMouseDown, cgEventLeftMouseUp, 0},
-		"right":  {cgEventRightMouseDown, cgEventRightMouseUp, 1},
-		"middle": {cgEventOtherMouseDown, cgEventOtherMouseUp, 2},
-	}[button]
-	p := location()
-	if err := post(cgEventCreateMouseEvent(0, types[0], p, types[2])); err != nil {
+	if err := p.Press(button); err != nil {
 		return err
 	}
-	return post(cgEventCreateMouseEvent(0, types[1], p, types[2]))
+	return p.Release(button)
 }
 
-func (macPointer) Scroll(dx, dy int) error {
+// down, up, button number
+var macButtons = map[string][3]uint32{
+	"left":   {cgEventLeftMouseDown, cgEventLeftMouseUp, 0},
+	"right":  {cgEventRightMouseDown, cgEventRightMouseUp, 1},
+	"middle": {cgEventOtherMouseDown, cgEventOtherMouseUp, 2},
+}
+
+func (p *macPointer) Press(button string) error {
+	if err := allowed(); err != nil {
+		return err
+	}
+	b := macButtons[button]
+	p.down = button
+	return post(cgEventCreateMouseEvent(0, b[0], location(), b[2]))
+}
+
+func (p *macPointer) Release(button string) error {
+	if err := allowed(); err != nil {
+		return err
+	}
+	b := macButtons[button]
+	if p.down == button {
+		p.down = ""
+	}
+	return post(cgEventCreateMouseEvent(0, b[1], location(), b[2]))
+}
+
+func (p *macPointer) Scroll(dx, dy int) error {
 	if err := allowed(); err != nil {
 		return err
 	}

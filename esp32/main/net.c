@@ -158,7 +158,7 @@ static void send_ble_status(void)
     }
     char text[64];
     int n = snprintf(text, sizeof text, "{\"type\":\"status\",\"bluetooth\":\"%s\"}",
-                     status_ble_connected() ? "connected" : "waiting");
+                     status_ble_connected() ? "connected" : status_ble_off() ? "off" : "waiting");
     esp_websocket_client_send_text(ws, text, n, pdMS_TO_TICKS(2000));
 }
 
@@ -413,6 +413,8 @@ static void handle_message(const char *text)
         if (key) {
             ble_key(key, state ? state : "press");
         }
+    } else if (strcmp(type, "bluetooth") == 0) {
+        ble_set_enabled(cJSON_IsTrue(cJSON_GetObjectItem(m, "on")));
     } else if (strcmp(type, "pointer") == 0) {
         const char *action = cJSON_GetStringValue(cJSON_GetObjectItem(m, "action"));
         if (action) {

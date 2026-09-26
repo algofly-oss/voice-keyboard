@@ -54,6 +54,9 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .chip svg.i{width:19px;height:19px}
 .chip[data-state=ok]{color:var(--muted)}  /* same gray as the settings icon */
 .chip[data-state=bad],.chip[data-state=off]{color:var(--danger)}
+.chip-btn{border:0;background:none;padding:0;border-radius:8px;font:inherit;cursor:default}
+.chip-btn.toggle{cursor:pointer}.chip-btn.toggle:hover{background:var(--surface)}
+.chip.kb-off{color:#aab2ff;background:var(--accent-soft)}  /* Bluetooth turned off on purpose */
 .chip[data-state=wait]{color:var(--warning);animation:blink 1.2s infinite}
 @keyframes blink{50%{opacity:.35}}
 
@@ -323,10 +326,13 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .vk.fn.on{background:var(--accent-soft);color:#fff;box-shadow:inset 0 0 0 1.5px var(--accent)}
 .vk.fn.on svg.i{color:#fff}
 .vk.fn.locked{background:var(--accent);color:#fff}
-.vk.mic-mini{display:none;border-radius:999px;background:var(--accent)}
-.vk.mic-mini svg.i{color:#fff}
-.recording .vk.mic-mini{background:var(--danger)}
-.busy .vk.mic-mini{background:var(--elevated)}
+.mic-mini{display:none;flex:none;width:44px;height:44px;border:0;border-radius:50%;background:var(--accent);color:#fff;align-items:center;justify-content:center;
+  box-shadow:0 4px 14px rgba(88,101,242,.35);touch-action:manipulation;transition:background .2s}
+.mic-mini svg.i{width:22px;height:22px}
+.mic-mini .stop,.recording .mic-mini .mic-i{display:none}
+.recording .mic-mini .stop{display:block;fill:#fff;stroke:none;width:18px;height:18px}
+.recording .mic-mini{background:var(--danger);box-shadow:0 4px 14px rgba(242,63,67,.4)}
+.busy .mic-mini{background:var(--elevated);box-shadow:none}
 /* A smaller microphone, so it fits above the keyboard. */
 .stage{padding-top:4px}
 .mic-wrap{width:124px;height:124px}
@@ -335,23 +341,31 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .spinner{width:44px;height:44px}
 .caption{height:calc(17px*1.4)}
 
-/* Touchpad (portrait): it takes the microphone's place; the small microphone
-   key moves into the toolbar, as in landscape. */
+/* Touchpad (portrait): it takes the microphone's place; a compact status line
+   below it holds the status, the level bars and a round microphone. */
 .touchpad{flex:1;min-height:0;width:100%;border-radius:16px;background:var(--surface);border:1px solid var(--border-soft);display:grid;place-items:center;
   touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:background .15s}
 .touchpad.touching{background:var(--surface-2)}
+.touchpad.dragging{background:var(--accent-soft);border-color:var(--accent)}
 .touchpad[hidden]{display:none}  /* display:grid would override [hidden] */
 .tp-hint{color:var(--subtle);font-size:13px;line-height:1.6;text-align:center;padding:0 20px;pointer-events:none}
 .app.touchpad-on .stage{display:flex;flex-direction:column;gap:8px;padding:4px 0 0}
 .app.touchpad-on .stage .above,.app.touchpad-on .stage .mic-row{display:none}
-.app.touchpad-on .stage .below{flex-direction:row;justify-content:center;gap:12px;padding:0;min-height:28px}
+.app.touchpad-on .stage .below{flex-direction:row;justify-content:center;align-items:center;gap:12px;padding:0;min-height:44px}
+.app.touchpad-on .mic-mini{display:flex}
+/* Landscape: the microphone is a key of the toolbar row, and there are no level bars. */
+html.landscape .mic-mini,html.landscape .wave{display:none!important}
+.vk.mic-key{display:none;background:var(--accent)}.vk.mic-key svg.i{color:#fff}
+.recording .vk.mic-key{background:var(--danger)}.busy .vk.mic-key{background:var(--elevated)}
+html.landscape .vk.mic-key{display:flex}
+/* In the compact line: status and text first, then the level bars right next to the microphone. */
+.app.touchpad-on .below>.wave{order:4}
+.app.touchpad-on .below>.mic-mini{order:5}
 .app.touchpad-on .wave{width:90px;height:20px}
 .app.touchpad-on .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex:1;min-width:0}
 .app.touchpad-on .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.app.touchpad-on .vk.mic-mini{display:flex}
-/* The compact status line (touchpad, landscape): the level bars and Discard only
-   while recording, so an idle status line gets the whole width. */
 .app.touchpad-on .caption.empty,html.landscape .caption.empty{display:none}
+/* The level bars and Discard only while recording, so an idle status line gets the room. */
 .app.touchpad-on:not(.recording) :is(.wave,.discard),html.landscape .app:not(.recording) :is(.wave,.discard){display:none}
 .app.touchpad-on .status,html.landscape .status{flex:1 1 auto;min-width:0;text-align:center}
 html.landscape .touchpad{display:none}
@@ -362,13 +376,12 @@ html.landscape .app{max-width:1100px;grid-template-rows:auto auto minmax(0,1fr);
 html.landscape .topbar{height:40px;padding:0}
 html.landscape .stage{display:flex;align-items:center;justify-content:center;padding:0;min-height:28px}
 html.landscape .stage .above,html.landscape .stage .mic-row{display:none}
-html.landscape .stage .below{flex-direction:row;justify-content:center;gap:12px;padding:0}
+html.landscape .stage .below{flex-direction:row;justify-content:center;align-items:center;gap:12px;padding:0}
 html.landscape .wave{width:90px;height:20px}
 html.landscape .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex:1;min-width:0}
 html.landscape .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html.landscape .discard{height:28px}
 html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),52px);gap:6px}
-html.landscape .vk.mic-mini{display:flex}
 </style>
 </head>
 <body>
@@ -377,7 +390,8 @@ html.landscape .vk.mic-mini{display:flex}
     <h1 class="sr-only">Voice Keyboard</h1>
     <div class="chips">
       <span class="chip" id="serverChip" data-state="wait" role="img" aria-label="Server status"><i data-i="server"></i></span>
-      <span class="chip" id="desktopChip" data-state="wait" role="img" aria-label="Client status"><i data-i="keyboard"></i></span>
+      <!-- Client status by colour. With an ESP32 active, a tap turns its Bluetooth keyboard off or on. -->
+      <button class="chip chip-btn" id="desktopChip" type="button" data-state="wait" aria-label="Client status"><i data-i="keyboard"></i></button>
     </div>
     <button class="icon-btn round" id="openSettings" aria-label="Settings" aria-haspopup="dialog"><i data-i="settings"></i></button>
   </header>
@@ -398,6 +412,8 @@ html.landscape .vk.mic-mini{display:flex}
       <p class="status" id="status" aria-live="polite">Tap the microphone to dictate</p>
       <p class="caption empty" id="caption" aria-live="polite" aria-label="Recognized text"><span class="inner"></span></p>
       <button class="discard" id="discard" tabindex="-1" aria-hidden="true"><i data-i="x"></i>Discard</button>
+      <!-- With the touchpad or in landscape the big microphone is hidden; this one takes its place. -->
+      <button class="mic-mini" id="micMini" type="button" aria-label="Start dictation"><i data-i="mic" class="mic-i"></i><i data-i="square" class="stop"></i></button>
     </div>
   </main>
 
@@ -591,6 +607,7 @@ function setState(next){
   app.classList.toggle('busy',next==='connecting'||next==='finishing');
   mic.setAttribute('aria-pressed',active);
   mic.setAttribute('aria-label',next==='recording'?'Stop dictation':next==='remote'?'Stop the dictation on the other device':next==='idle'?'Start dictation':'Working');
+  $('#micMini').setAttribute('aria-label',mic.getAttribute('aria-label'));
   const liveNow=next==='recording'?live:next==='remote'?!!remote?.live:false;
   app.classList.toggle('live-dictation',liveNow);
   $('#discard').tabIndex=active&&!liveNow?0:-1;$('#discard').setAttribute('aria-hidden',!active||liveNow);
@@ -598,17 +615,32 @@ function setState(next){
 }
 
 // ---------- Device and server status ----------
+// An ESP32's Bluetooth keyboard, off so a tablet shows its own on-screen keyboard.
+async function setBluetooth(on){const sel=deviceStatus.selected;if(!sel)return;
+  sel.bluetooth=on?'waiting':'off';
+  const r=await fetch(`/api/devices/${sel.id}/bluetooth?on=${on?1:0}`,{method:'POST'}).catch(()=>null);
+  if(!r?.ok){toast('Could not reach the board',{error:true});return}
+  toast(on?'Keyboard reconnecting…':'Keyboard disconnected. The on-screen keyboard is back.')}
+// Dictating, typing or the touchpad needs the keyboard: connect it again first.
+function keyboardNeeded(){const sel=deviceStatus.selected;
+  if(sel?.online&&sel.bluetooth==='off'&&/^esp32/i.test(sel.platform||''))setBluetooth(true)}
 function setChip(el,s,label,full){el.dataset.state=s;el.setAttribute('aria-label',full);el.title=full}
 async function pollDevice(){
   try{deviceStatus=await (await fetch('/api/status',{cache:'no-store'})).json()}catch{return}
   if(!deviceStatus.devices)return;
   const sel=deviceStatus.selected;
   // An ESP32 board is only ready when a computer is connected to it over Bluetooth.
-  const ready=sel?.online&&sel.bluetooth!=='waiting';
+  const ready=sel?.online&&sel.bluetooth!=='waiting'&&sel.bluetooth!=='off';
+  const espActive=!!sel?.online&&/^esp32/i.test(sel.platform||'');
   const status=!sel?'No client selected. Add one in Settings → Clients'
+    :sel.online&&sel.bluetooth==='off'?`${sel.name}: Bluetooth keyboard off, so the device can use its on-screen keyboard. Tap to connect it again`
     :sel.online&&sel.bluetooth==='waiting'?`${sel.name} is online, but no device is connected to it over Bluetooth`
     :`Typing on ${sel.name} (${sel.online?'online':'offline'}${sel.bluetooth==='connected'?', Bluetooth connected':''})`;
-  setChip($('#desktopChip'),ready?'ok':sel?'wait':'bad',sel?sel.name:'No client',status);
+  const chip=$('#desktopChip'),off=espActive&&sel.bluetooth==='off';
+  setChip(chip,off?'ok':ready?'ok':sel?'wait':'bad',sel?sel.name:'No client',
+    espActive&&!off?status+'. Tap to disconnect the Bluetooth keyboard (the device then shows its on-screen keyboard)':status);
+  chip.classList.toggle('toggle',espActive);chip.classList.toggle('kb-off',off);
+  chip.querySelector('svg').innerHTML=ICONS[off?'keyboardOff':'keyboard'];
   renderDevices(deviceStatus.devices);lockKeys(!sel?.online);
 }
 async function checkServer(url){
@@ -645,6 +677,7 @@ let reconnectTimer=0,retryDelay=1000,carried='',connText='',sentLog=[],sentBytes
 const MAX_BUFFER_BYTES=16000*2*300,REPLAY_BYTES=16000*2*30;
 
 async function startDictation(){
+  keyboardNeeded();
   if(state!=='idle')return;
   if(!window.isSecureContext||!navigator.mediaDevices){toast('The microphone needs HTTPS. Open this page through your HTTPS proxy.',{error:true});return}
   if(!cfg.serverUrl){toast('Set the server URL in Settings first.',{error:true,action:'Open',onAction:()=>openSheet('server')});return}
@@ -816,6 +849,9 @@ function connectEvents(){
   const u=serverUrl('/v1/events');u.protocol=u.protocol==='https:'?'wss:':'ws:';
   let e;try{e=events=new WebSocket(u)}catch{return}
   e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.type==='devices')return pollDevice();
+    if(m.type==='prefs'){  // changed in another browser (or this one): apply at once
+      for(const k of ACCOUNT_PREFS)if(k in m){cfg[k]=m[k];const box=form.elements[k];if(box)box.checked=isOn(m[k])}
+      applyTouchpad();return}
     if(m.owner===clientId)return;
     if(m.type==='state'){if(m.active)enterRemote(m);else if(remote)exitRemote(m.final)}
     else if(m.type==='level'&&remote)remote.level=m.v;
@@ -841,7 +877,7 @@ document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document
 // "hold" and "up" must reach an ESP32 in order too). Letters typed while a
 // request is in flight are merged into the next one.
 const outbox=[];let sending=false;
-function queueOut(op){const last=outbox[outbox.length-1];
+function queueOut(op){keyboardNeeded();const last=outbox[outbox.length-1];
   if(op.text!==undefined&&last&&last.text!==undefined&&!last.sent)last.text+=op.text;else outbox.push(op);pumpOut()}
 async function pumpOut(){if(sending)return;sending=true;
   while(outbox.length){const op=outbox[0];op.sent=true;
@@ -959,14 +995,18 @@ function renderVkb(){
   pressOnce(tool('^C','Ctrl+C: interrupt'),'ctrl+c',false);
   pressOnce(tool('^A','Ctrl+A: select all'),'ctrl+a',false);
   for(const [k,label] of [['left','Left'],['up','Up'],['down','Down'],['right','Right']])key(svg(k),label,k);
-  // Landscape only: the big microphone is hidden there.
-  const mic=tool(svg('mic'),'Dictate','mic-mini');mic.dataset.alwaysOn='';
+  // Landscape only: the microphone as the last key of this row.
+  const mic=tool(svg('mic'),'Dictate','mic-key');mic.dataset.alwaysOn='';
   mic.addEventListener('pointerdown',e=>e.preventDefault());mic.addEventListener('click',()=>$('#mic').click());
+
   kb.replaceChildren(bar,...VKB_LAYERS[vkbLayer].map(row=>{const r=document.createElement('div');r.className='vkb-row';r.append(...row.map(vkbKey));return r}));
   kb.querySelectorAll('button:not([data-always-on])').forEach(b=>b.disabled=keysLocked);
   renderMods();
 }
 renderVkb();
+$('#micMini').addEventListener('click',()=>$('#mic').click());
+$('#desktopChip').addEventListener('click',()=>{const sel=deviceStatus.selected;
+  if(sel?.online&&/^esp32/i.test(sel.platform||''))setBluetooth(sel.bluetooth==='off')});
 
 // ---------- Touchpad ----------
 // Pointer input goes over the live /v1/events socket, summed per animation frame.
@@ -974,29 +1014,53 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
 (function touchpad(){
   const pad=$('#touchpad'),fingers=new Map(),move={x:0,y:0},scroll={x:0,y:0};
   const SCROLL_PX=18;  // finger travel per scroll step
-  let gesture=null,frame=0;
-  const send=m=>{if(events?.readyState===1)events.send(JSON.stringify({type:'pointer',...m}))};
+  // Tap and drag, as on Windows: a finger that lands within DRAG_WINDOW of a tap
+  // holds the left button once it moves, until it lifts.
+  const DRAG_WINDOW=300,DRAG_START_PX=6;
+  let gesture=null,frame=0,lastTap=-1e9,dragging=false;
+  const send=m=>{keyboardNeeded();if(events?.readyState===1)events.send(JSON.stringify({type:'pointer',...m}))};
   const flush=()=>{frame=0;
     const mx=Math.round(move.x),my=Math.round(move.y);if(mx||my){send({action:'move',dx:mx,dy:my});move.x-=mx;move.y-=my}
     const sx=Math.trunc(scroll.x),sy=Math.trunc(scroll.y);if(sx||sy){send({action:'scroll',dx:sx,dy:sy});scroll.x-=sx;scroll.y-=sy}};
   const later=()=>{frame||=requestAnimationFrame(flush)};
-  pad.addEventListener('pointerdown',e=>{e.preventDefault();try{pad.setPointerCapture(e.pointerId)}catch{}
-    fingers.set(e.pointerId,{x:e.clientX,y:e.clientY,t:e.timeStamp});
-    if(fingers.size===1)gesture={start:e.timeStamp,travel:0,most:1};else if(gesture)gesture.most=Math.max(gesture.most,fingers.size);
-    pad.classList.add('touching')});
-  pad.addEventListener('pointermove',e=>{const f=fingers.get(e.pointerId);if(!f||!gesture)return;
-    const dx=e.clientX-f.x,dy=e.clientY-f.y,dt=Math.max(1,e.timeStamp-f.t);Object.assign(f,{x:e.clientX,y:e.clientY,t:e.timeStamp});
+  const now=()=>{cancelAnimationFrame(frame);flush()};  // pending motion first, then the button
+  const release=()=>{if(!dragging)return;dragging=false;now();send({action:'release',button:'left'});pad.classList.remove('dragging')};
+  // A finger (or the mouse) goes down, moves, lifts: the same for touch and pointer events.
+  const down=(id,x,y,t)=>{fingers.set(id,{x,y,t});
+    if(fingers.size===1)gesture={start:t,travel:0,most:1,drag:t-lastTap<DRAG_WINDOW};else if(gesture)gesture.most=Math.max(gesture.most,fingers.size);
+    pad.classList.add('touching')};
+  const moved=(id,x,y,t)=>{const f=fingers.get(id);if(!f||!gesture)return;
+    const dx=x-f.x,dy=y-f.y,dt=Math.max(1,t-f.t);Object.assign(f,{x,y,t});
     gesture.travel+=Math.abs(dx)+Math.abs(dy);
+    if(gesture.drag&&!dragging&&fingers.size===1&&gesture.travel>DRAG_START_PX){
+      dragging=true;now();send({action:'press',button:'left'});pad.classList.add('dragging');navigator.vibrate?.(12)}
     if(fingers.size===1){  // faster swipes go further, like a laptop touchpad
       const gain=1.3+Math.min(2.2,Math.hypot(dx,dy)/dt*1.4);move.x+=dx*gain;move.y+=dy*gain}
     else{  // two fingers: scroll, the content following the fingers; each finger adds half
       scroll.x-=dx/SCROLL_PX/fingers.size;scroll.y-=dy/SCROLL_PX/fingers.size}
-    later()});
-  const lift=e=>{if(!fingers.delete(e.pointerId))return;if(fingers.size)return;
+    later()};
+  const lifted=(id,t)=>{if(!fingers.delete(id)||fingers.size)return;
     pad.classList.remove('touching');
-    if(gesture&&gesture.travel<12&&e.timeStamp-gesture.start<320){send({action:'click',button:gesture.most>=2?'right':'left'});navigator.vibrate?.(8)}
+    if(dragging)release();
+    else if(gesture&&gesture.travel<12&&t-gesture.start<320){  // a tap: a click (the second of a double tap too)
+      send({action:'click',button:gesture.most>=2?'right':'left'});navigator.vibrate?.(8);
+      lastTap=gesture.most>=2?-1e9:t}
     gesture=null};
-  ['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,lift));
+  // Never leave the button held: leaving the page or losing the socket ends a drag.
+  addEventListener('pagehide',release);document.addEventListener('visibilitychange',()=>{if(document.hidden)release()});
+  // Touch events, not pointer events: only cancelling them stops iOS Safari from
+  // panning and zooming the page with two fingers (it ignores touch-action there).
+  const each=(e,fn)=>{e.preventDefault();for(const t of e.changedTouches)fn(t.identifier,t.clientX,t.clientY,e.timeStamp)};
+  pad.addEventListener('touchstart',e=>each(e,down),{passive:false});
+  pad.addEventListener('touchmove',e=>each(e,moved),{passive:false});
+  pad.addEventListener('touchend',e=>each(e,(id,x,y,t)=>lifted(id,t)),{passive:false});
+  pad.addEventListener('touchcancel',e=>each(e,(id,x,y,t)=>lifted(id,t)),{passive:false});
+  ['gesturestart','gesturechange','gestureend'].forEach(n=>pad.addEventListener(n,e=>e.preventDefault()));  // Safari pinch
+  // A mouse (or a pen) on a computer: pointer events; touches are handled above.
+  const mouse=e=>e.pointerType!=='touch';
+  pad.addEventListener('pointerdown',e=>{if(!mouse(e))return;e.preventDefault();try{pad.setPointerCapture(e.pointerId)}catch{}down('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
+  pad.addEventListener('pointermove',e=>{if(mouse(e))moved('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
+  ['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,e=>{if(mouse(e))lifted('p'+e.pointerId,e.timeStamp)}));
   pad.addEventListener('contextmenu',e=>e.preventDefault());
 })();
 
@@ -1060,7 +1124,9 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
 
 
 // Settings this browser keeps; everything else comes from the server on each load.
-const USER_PREFS=['liveTyping','touchpad','language','afterText','pace'];
+// Kept per browser. Account preferences (touchpad) are on the server and shared by all browsers.
+const USER_PREFS=['liveTyping','language','afterText','pace'];
+const ACCOUNT_PREFS=['touchpad'];
 function userPrefs(o){return Object.fromEntries(USER_PREFS.filter(k=>k in o).map(k=>[k,o[k]]))}
 async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=userPrefs(JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}'));/* only the user's own preferences; server facts (variant, CA, model) always come from the server */cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}const translating=cfg.variant==='translate';$('#languageField').hidden=translating;$('.translate-note').hidden=!translating}
 
@@ -1069,6 +1135,9 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     const body=changes();if(![...body].length)return;
     for(const [key,value] of body)cfg[key]=value;
     localStorage.setItem('voice-keyboard-settings',JSON.stringify(userPrefs(cfg)));
+    const shared=Object.fromEntries(ACCOUNT_PREFS.filter(k=>body.has(k)).map(k=>[k,isOn(body.get(k))]));
+    if(Object.keys(shared).length)fetch('/api/prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shared)})
+      .then(r=>{if(!r.ok)toast('Could not save the touchpad setting',{error:true})}).catch(()=>{});
     saveBtn.disabled=true;closeSheet();toast('Settings saved');applyTouchpad();
   });
   let install=null,installOs=/Win/.test(navigator.platform||navigator.userAgent)?'windows':'unix';
@@ -1131,7 +1200,7 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
       const li=document.createElement('li');li.className='device';
       const p=platformOf(d),esp=p.kind==='esp32';
       // ESP32 boards are only ready to type with a device connected over Bluetooth.
-      const bt=esp&&d.online?(d.bluetooth==='connected'?'on':'wait'):'';
+      const bt=esp&&d.online?(d.bluetooth==='connected'?'on':d.bluetooth==='off'?'off':'wait'):'';
       const status=d.online?'Online':d.lastSeen?'Offline · last seen '+ago(d.lastSeen):'Never connected';
       const seenAt=!d.online&&d.lastSeen?'Last seen '+new Date(d.lastSeen*1000).toLocaleString([],{dateStyle:'medium',timeStyle:'short'}):'';
       li.innerHTML=`<div class="device-pick" role="button" tabindex="0" aria-pressed="${d.selected}" aria-label="Make this the active client">`+
@@ -1142,9 +1211,9 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
         `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename or describe">${svg('edit')}</button>`+
         `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;
       li.querySelector('.title').textContent=d.name;
-      const btText=bt==='on'?'Bluetooth connected':bt==='wait'?'No Bluetooth device':'';
+      const btText=bt==='on'?'Bluetooth connected':bt==='wait'?'No Bluetooth device':bt==='off'?'Bluetooth off':'';
       // Two lines for every client; the rest is in the tooltip.
-      li.querySelector('.hint').textContent=[status,d.version&&'v'+d.version,btText&&bt==='wait'?btText:'',d.description||p.label].filter(Boolean).join(' · ');
+      li.querySelector('.hint').textContent=[status,d.version&&'v'+d.version,btText&&(bt==='wait'||bt==='off')?btText:'',d.description||p.label].filter(Boolean).join(' · ');
       // Newer build available: desktop clients update themselves; ESP32 boards from the setup page.
       const upd=li.querySelector('.update-btn');
       if(upd){upd.title=`Update to ${d.latest}`;upd.disabled=updating.has(d.id);

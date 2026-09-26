@@ -70,6 +70,9 @@ static esp_hid_device_config_t hid_config = {
 
 static esp_hidd_dev_t *hid;
 static volatile bool connected;
+// Turned off from the web app: no advertising, no connection, so an iPad or
+// phone shows its own on-screen keyboard again. Not saved: a restart turns it on.
+static volatile bool enabled = true;
 static uint8_t own_addr_type;
 static char name[VK_NAME_MAX + 1] = "Voice Keyboard";
 
@@ -79,6 +82,13 @@ static int gap_event(struct ble_gap_event *event, void *arg);
 
 static void advertise(void)
 {
+    if (!enabled) {
+        vk_status_t *s = status_begin();
+        s->ble = "off";
+        s->ble_peer[0] = '\0';
+        status_end();
+        return;
+    }
     if (connected || !ble_hs_synced()) {
         return;
     }
@@ -210,7 +220,7 @@ typedef struct {
     char *text;   // text to type, or NULL for a key or a pointer action
     int8_t key;   // HID usage of a named key
     uint8_t mod;  // modifiers pressed with it (ctrl+c)
-    char state;   // 'p'ress, 'd'own, 'u'p; for the pointer: 'm'ove, 'c'lick, 's'croll
+    char state;   // 'p'ress, 'd'own, 'u'p; pointer: 'm'ove, 'c'lick, 's'croll, 'P'ress, 'R'elease
     int16_t dx, dy;   // pointer motion or scroll steps
     uint8_t buttons;  // pointer click: 1 left, 2 right, 4 middle
 } job_t;
@@ -247,6 +257,16 @@ static void send_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel, int8_t
     send_input(MOUSE_REPORT_ID, report, sizeof report);
 }
 
+// Buttons held for a drag: they stay set in every report, so motion drags.
+static uint8_t held_buttons;
+static int64_t last_pointer_us;
+#define DRAG_TIMEOUT_US (5 * 1000 * 1000LL)  // no input for this long: let go
+
+static bool is_pointer(const job_t *job)
+{
+    return job->state == 'm' || job->state == 'c' || job->state == 's' || job->state == 'P' || job->state == 'R';
+}
+
 static int8_t step(int *rest)
 {
     int s = *rest > 127 ? 127 : *rest < -127 ? -127 : *rest;
@@ -257,22 +277,31 @@ static int8_t step(int *rest)
 static void pointer_job(const job_t *job)
 {
     int dx = job->dx, dy = job->dy;
+    last_pointer_us = esp_timer_get_time();
     switch (job->state) {
     case 'm':  // a report carries at most ±127 per axis
         while (dx || dy) {
             int8_t x = step(&dx), y = step(&dy);
-            send_mouse(0, x, y, 0, 0);
+            send_mouse(held_buttons, x, y, 0, 0);
         }
         break;
     case 'c':
-        send_mouse(job->buttons, 0, 0, 0, 0);
-        send_mouse(0, 0, 0, 0, 0);
+        send_mouse(held_buttons | job->buttons, 0, 0, 0, 0);
+        send_mouse(held_buttons, 0, 0, 0, 0);
+        break;
+    case 'P':
+        held_buttons |= job->buttons;
+        send_mouse(held_buttons, 0, 0, 0, 0);
+        break;
+    case 'R':
+        held_buttons &= ~job->buttons;
+        send_mouse(held_buttons, 0, 0, 0, 0);
         break;
     case 's':  // the wheel counts up as positive; dy > 0 scrolls down
         dy = -dy;
         while (dx || dy) {
             int8_t wheel = step(&dy), pan = step(&dx);
-            send_mouse(0, 0, 0, wheel, pan);
+            send_mouse(held_buttons, 0, 0, wheel, pan);
         }
         break;
     }
@@ -353,16 +382,23 @@ static void typing_task(void *arg)
 {
     job_t job;
     for (;;) {
-        xQueueReceive(jobs, &job, portMAX_DELAY);
+        if (xQueueReceive(jobs, &job, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            // A drag whose release never came (the phone lost its connection).
+            if (held_buttons && esp_timer_get_time() - last_pointer_us > DRAG_TIMEOUT_US && connected) {
+                held_buttons = 0;
+                send_mouse(0, 0, 0, 0, 0);
+            }
+            continue;
+        }
         if (!connected) {
-            bool pointer = job.state == 'm' || job.state == 'c' || job.state == 's';
+            bool pointer = is_pointer(&job);
             if (!pointer) {  // pointer motion would flood the log
                 ESP_LOGW(TAG, "not typed: no computer is connected over Bluetooth");
             }
             free(job.text);
             continue;
         }
-        if (job.state == 'm' || job.state == 'c' || job.state == 's') {
+        if (is_pointer(&job)) {
             pointer_job(&job);
         } else if (job.text) {
             type_text(job.text);
@@ -452,8 +488,8 @@ void ble_pointer(const char *action, int dx, int dy, const char *button)
         job.state = 'm';
     } else if (strcmp(action, "scroll") == 0) {
         job.state = 's';
-    } else if (strcmp(action, "click") == 0 && button) {
-        job.state = 'c';
+    } else if (button && (strcmp(action, "click") == 0 || strcmp(action, "press") == 0 || strcmp(action, "release") == 0)) {
+        job.state = action[0] == 'c' ? 'c' : action[0] == 'p' ? 'P' : 'R';
         job.buttons = strcmp(button, "right") == 0 ? 2 : strcmp(button, "middle") == 0 ? 4 : 1;
     } else {
         return;
@@ -477,6 +513,25 @@ void ble_set_name(const char *new_name)
     strlcpy(name, new_name && new_name[0] ? new_name : "Voice Keyboard", sizeof name);
     ble_svc_gap_device_name_set(name);
     advertise();  // takes effect for computers that have not paired yet
+}
+
+void ble_set_enabled(bool on)
+{
+    if (on == enabled) {
+        return;
+    }
+    enabled = on;
+    ESP_LOGI(TAG, "Bluetooth keyboard %s", on ? "on" : "off (the device can use its on-screen keyboard)");
+    if (!on) {
+        ble_gap_adv_stop();
+        struct ble_gap_conn_desc desc;
+        for (uint16_t handle = 0; handle < 8; handle++) {
+            if (ble_gap_conn_find(handle, &desc) == 0) {
+                ble_gap_terminate(handle, BLE_ERR_REM_USER_CONN_TERM);
+            }
+        }
+    }
+    advertise();  // on: a paired device reconnects by itself; off: reports "off"
 }
 
 void ble_forget(void)

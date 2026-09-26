@@ -7,6 +7,7 @@ database does not leak working credentials, and a device can be revoked.
 """
 
 import hashlib
+import json
 import hmac
 import secrets
 import sqlite3
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
     install_token      TEXT NOT NULL UNIQUE,
     selected_device_id INTEGER,
     session_epoch      INTEGER NOT NULL DEFAULT 0,
+    prefs              TEXT NOT NULL DEFAULT '{}',  -- JSON: preferences shared by all the account's browsers
     created_at         INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS devices (
@@ -93,6 +95,8 @@ class Store:
             columns = {row["name"] for row in self._db.execute("PRAGMA table_info(devices)")}
             if "description" not in columns:
                 self._db.execute("ALTER TABLE devices ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+            if "prefs" not in {row["name"] for row in self._db.execute("PRAGMA table_info(users)")}:
+                self._db.execute("ALTER TABLE users ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'")
 
     def _q(self, sql: str, args=()) -> list[sqlite3.Row]:
         with self._lock:
@@ -145,6 +149,19 @@ class Store:
         token = secrets.token_urlsafe(24)
         self._q("UPDATE users SET install_token=? WHERE id=?", (token, user_id))
         return token
+
+    def user_prefs(self, user) -> dict:
+        try:
+            return json.loads(user["prefs"] or "{}")
+        except (ValueError, IndexError, KeyError):
+            return {}
+
+    def update_user_prefs(self, user_id: int, changes: dict) -> dict:
+        with self._lock:
+            row = self._db.execute("SELECT prefs FROM users WHERE id=?", (user_id,)).fetchone()
+            prefs = {**json.loads(row["prefs"] or "{}"), **changes}
+            self._db.execute("UPDATE users SET prefs=? WHERE id=?", (json.dumps(prefs), user_id))
+        return prefs
 
     def select_device(self, user_id: int, device_id: int | None):
         self._q("UPDATE users SET selected_device_id=? WHERE id=?", (device_id, user_id))

@@ -615,6 +615,21 @@ async def client_errors(request: Request):
                        for r in rows]}
 
 
+@app.post("/api/devices/{device_id}/bluetooth")
+async def device_bluetooth(device_id: int, request: Request):
+    """ESP32 boards: ?on=0 disconnects the Bluetooth keyboard (the tablet or phone
+    shows its on-screen keyboard again), ?on=1 offers it again."""
+    user = require_user(request)
+    device = store.device(user["id"], device_id)
+    if not device or not (device["platform"] or "").upper().startswith("ESP32"):
+        raise HTTPException(404, "No such ESP32 board")
+    ws = room_for(user).devices.get(device_id)
+    if ws is None:
+        raise HTTPException(409, "The board is offline")
+    await ws.send_json({"type": "bluetooth", "on": request.query_params.get("on") == "1"})
+    return {"ok": True}
+
+
 @app.post("/api/devices/{device_id}/update")
 async def update_device_now(device_id: int, request: Request):
     """The web app's Update button: the client installs the newest build now."""
@@ -697,12 +712,34 @@ async def backend_key(request: Request):
 
 @app.get("/api/settings")
 async def backend_settings(request: Request):
-    require_user(request)
+    user = require_user(request)
     return {"liveTyping": True, "language": DEFAULT_LANGUAGE, "afterText": "none", "maxSeconds": 600,
             "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe",
-            "pace": DEFAULT_PACE,
+            "pace": DEFAULT_PACE, **account_prefs(user),
             # With Caddy's local CA, install commands trust it on first contact.
             "localCa": os.environ.get("VK_PROTOCOL", "https") in ("https", "both") and os.environ.get("VK_TLS", "internal") == "internal"}
+
+
+# Preferences of the account, shared by all its browsers: (name, type, default).
+ACCOUNT_PREFS = {"touchpad": (bool, True)}
+
+
+def account_prefs(user) -> dict:
+    saved = store.user_prefs(user)
+    return {name: saved.get(name, default) for name, (_, default) in ACCOUNT_PREFS.items()}
+
+
+@app.post("/api/prefs")
+async def set_prefs(request: Request):
+    """Changes account preferences; every open web UI of the account applies them at once."""
+    user = require_user(request)
+    body = await request.json()
+    changes = {k: v for k, v in body.items() if k in ACCOUNT_PREFS and isinstance(v, ACCOUNT_PREFS[k][0])}
+    if not changes or len(changes) != len(body):
+        raise HTTPException(400, f"Unknown preference or wrong type; known: {', '.join(ACCOUNT_PREFS)}")
+    store.update_user_prefs(user["id"], changes)
+    room_for(user).broadcast({"type": "prefs", **changes})
+    return account_prefs(store.user(user["id"]))
 
 
 @app.api_route("/api/enroll", methods=["GET", "POST"])
@@ -877,7 +914,9 @@ async def keyboard(ws: WebSocket):
     server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
     server -> {"type":"update","version":"1.5.3","url":"/client/…","sha256":"…","size":…,"manual":false}
               a newer build: the desktop client installs it and restarts
-    client -> {"type":"status","bluetooth":"connected"|"waiting"}   ESP32 boards, on every change
+    client -> {"type":"status","bluetooth":"connected"|"waiting"|"off"}   ESP32 boards, on every change
+    server -> {"type":"bluetooth","on":false}   ESP32: drop and stop offering the Bluetooth keyboard
+              (a tablet then shows its on-screen keyboard); true offers it again
     client -> {"type":"log","level":"error","message":"…"}   an error on the client, stored for troubleshooting
     The token is the account's install token (first pairing), the device's
     credential, or a credential issued before accounts existed.
@@ -946,7 +985,7 @@ async def keyboard(ws: WebSocket):
                         text = str(data.get("message") or "")[:1000]
                         store.add_client_error(device["id"], text)
                         log.warning("Client %r (%s) reported: %s", device["name"], device["platform"], text)
-                elif data.get("type") == "status" and data.get("bluetooth") in ("connected", "waiting"):
+                elif data.get("type") == "status" and data.get("bluetooth") in ("connected", "waiting", "off"):
                     room.bluetooth[device["id"]] = data["bluetooth"]
                     room.broadcast({"type": "devices"})
     except (WebSocketDisconnect, ValueError, KeyError):
@@ -967,7 +1006,7 @@ class Room:
     def __init__(self):
         self.watchers: set[WebSocket] = set()
         self.devices: dict[int, WebSocket] = {}  # device id -> connected desktop client
-        self.bluetooth: dict[int, str] = {}       # device id -> "connected" / "waiting" (ESP32 boards)
+        self.bluetooth: dict[int, str] = {}       # device id -> "connected" / "waiting" / "off" (ESP32 boards)
         self.selected: int | None = None          # the device that types
         self.pending: list[tuple[float, dict]] = []  # typed while the selected device was offline
         self.active: dict | None = None  # owner, started, live, ws, joiner
@@ -1067,8 +1106,8 @@ def pointer_message(data: dict) -> dict | None:
         except (TypeError, ValueError):
             return None
         return {"type": "pointer", "action": action, "dx": dx, "dy": dy} if dx or dy else None
-    if action == "click" and data.get("button") in ("left", "right", "middle"):
-        return {"type": "pointer", "action": "click", "button": data["button"]}
+    if action in ("click", "press", "release") and data.get("button") in ("left", "right", "middle"):
+        return {"type": "pointer", "action": action, "button": data["button"]}
     return None
 
 
@@ -1099,9 +1138,11 @@ async def events(ws: WebSocket):
     server -> {"type":"state","active":false,"owner":"...","final":"..."}  when a dictation ends
     server -> {"type":"segment","owner":"...","text":"..."} / {"type":"level","owner":"...","v":0.4}
     server -> {"type":"devices"}  the client list changed; fetch /api/status
+    server -> {"type":"prefs","touchpad":true}  an account preference changed (POST /api/prefs)
     client -> {"type":"stop"} or {"type":"cancel"}  to end another device's dictation
     client -> {"type":"pointer","action":"move"|"scroll","dx":3,"dy":-1} or
-              {"type":"pointer","action":"click","button":"left"|"right"|"middle"}
+              {"type":"pointer","action":"click"|"press"|"release","button":"left"|"right"|"middle"}
+              (press/release: a held button, for dragging)
               from the touchpad, passed on to the active client
     """
     await ws.accept()  # Accept first so the browser sees the 4401 close code.

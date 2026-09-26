@@ -57,6 +57,7 @@ vk_status_t *status_begin(void);  // locks the status for a change ...
 void status_end(void);            // ... then unlocks and pushes it to the page
 void status_emit(void);
 bool status_ble_connected(void);
+bool status_ble_off(void);
 
 // Wi-Fi and the backend connection.
 void net_start(void);
@@ -70,6 +71,7 @@ void net_report_log(const char *line);  // an error or warning line, sent to the
 void ble_start(void);
 void ble_set_name(const char *name);
 void ble_forget(void);
+void ble_set_enabled(bool on);  // off: disconnect and stop advertising, until on (or a restart)
 void ble_type(const char *text);             // queued; typed in order
 void ble_key(const char *key, const char *state);
 // Touchpad: action "move" or "scroll" (dx, dy), or "click" (button left/right/middle).
