@@ -394,6 +394,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
   touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:background .15s}
 .touchpad.touching{background:var(--surface-2)}
 .touchpad.dragging{background:var(--accent-soft);border-color:var(--accent)}
+.touchpad.captured{border-color:var(--accent);cursor:none}
 .touchpad[hidden]{display:none}  /* display:grid would override [hidden] */
 .tp-hint{color:var(--subtle);font-size:13px;line-height:1.6;text-align:center;padding:0 20px;pointer-events:none}
 .app.touchpad-on .stage{display:flex;flex-direction:column;gap:8px;padding:4px 0 0}
@@ -1178,18 +1179,35 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
   pad.addEventListener('touchend',e=>each(e,(id,x,y,t)=>lifted(id,t)),{passive:false});
   pad.addEventListener('touchcancel',e=>each(e,(id,x,y,t)=>lifted(id,t)),{passive:false});
   ['gesturestart','gesturechange','gestureend'].forEach(n=>pad.addEventListener(n,e=>e.preventDefault()));  // Safari pinch
-  // A mouse (or a pen) on a computer: pointer events; touches are handled above.
+  // A mouse or a laptop's trackpad: a click on the touchpad captures the pointer
+  // (Pointer Lock), so every movement, click, drag and scroll goes to the device,
+  // with the computer's own pointer speed, until Esc gives it back. Browsers
+  // without Pointer Lock move it only while the button is held, as before.
+  const locked=()=>document.pointerLockElement===pad,BUTTONS=['left','middle','right'],held=new Set();
+  const hint=pad.querySelector('.tp-hint'),hintHtml=hint.innerHTML;
   const mouse=e=>e.pointerType!=='touch';
-  pad.addEventListener('pointerdown',e=>{if(!mouse(e))return;e.preventDefault();
+  pad.addEventListener('pointerdown',e=>{if(!mouse(e)||locked())return;e.preventDefault();
+    if(pad.requestPointerLock){try{pad.requestPointerLock()?.catch?.(()=>{})}catch{}return}
     // A mouse's right or middle button clicks that button on the device.
     if(e.button===1||e.button===2){send({action:'click',button:e.button===2?'right':'middle'});return}
     try{pad.setPointerCapture(e.pointerId)}catch{}down('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
+  // Captured: mouse events, not pointer events, which report only the first of
+  // several buttons held at once. Buttons press and release on the device, so
+  // double-clicks and drags behave as they would there.
+  document.addEventListener('mousemove',e=>{if(!locked())return;move.x+=e.movementX;move.y+=e.movementY;later()});
+  document.addEventListener('mousedown',e=>{const b=BUTTONS[e.button];if(!locked()||!b)return;e.preventDefault();
+    now();held.add(b);send({action:'press',button:b})});
+  document.addEventListener('mouseup',e=>{const b=BUTTONS[e.button];if(!locked()||!b||!held.delete(b))return;
+    now();send({action:'release',button:b})});
+  document.addEventListener('pointerlockchange',()=>{const on=locked();pad.classList.toggle('captured',on);
+    hint.innerHTML=on?'Controlling the device<br>Esc to release the pointer':hintHtml;
+    if(!on){now();for(const b of held)send({action:'release',button:b});held.clear()}});  // never leave a button held
   // A mouse wheel (or a laptop's two-finger scroll) over the touchpad scrolls the device.
   pad.addEventListener('wheel',e=>{e.preventDefault();
     const perStep=e.deltaMode===1?3:e.deltaMode===2?0.1:100;  // lines, pages, or pixels per step
     scroll.x+=e.deltaX/perStep;scroll.y+=e.deltaY/perStep;later()},{passive:false});
-  pad.addEventListener('pointermove',e=>{if(mouse(e))moved('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
-  ['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,e=>{if(mouse(e)&&e.button!==1&&e.button!==2)lifted('p'+e.pointerId,e.timeStamp)}));
+  pad.addEventListener('pointermove',e=>{if(mouse(e)&&!locked())moved('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
+  ['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,e=>{if(mouse(e)&&!locked()&&e.button!==1&&e.button!==2)lifted('p'+e.pointerId,e.timeStamp)}));
   pad.addEventListener('contextmenu',e=>e.preventDefault());
 })();
 
