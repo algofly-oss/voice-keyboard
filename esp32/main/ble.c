@@ -73,6 +73,14 @@ static volatile bool connected;
 // Turned off from the web app: no advertising, no connection, so an iPad or
 // phone shows its own on-screen keyboard again. Not saved: a restart turns it on.
 static volatile bool enabled = true;
+// Pairing mode (from the web app): until then, computers paired before are
+// refused, so they cannot take the board back before a new device pairs.
+static volatile int64_t pairing_until_us;
+
+static bool pairing(void)
+{
+    return pairing_until_us && esp_timer_get_time() < pairing_until_us;
+}
 static uint8_t own_addr_type;
 static char name[VK_NAME_MAX + 1] = "Voice Keyboard";
 
@@ -120,7 +128,7 @@ static void advertise(void)
         return;
     }
     vk_status_t *s = status_begin();
-    s->ble = "advertising";
+    s->ble = pairing() ? "pairing" : "advertising";
     s->ble_peer[0] = '\0';
     status_end();
 }
@@ -140,6 +148,11 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             struct ble_store_value_sec bond;
             bool bonded = ble_store_read_peer_sec(&key, &bond) == 0;
             ESP_LOGI(TAG, "connection from %s computer", bonded ? "a paired" : "a new");
+            if (bonded && pairing()) {
+                ESP_LOGI(TAG, "pairing mode: refused a device paired before; waiting for a new one");
+                ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+                return 0;
+            }
             connected = true;
             vk_status_t *s = status_begin();
             s->ble = "connected";
@@ -158,6 +171,10 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         ESP_LOGI(TAG, "encryption %s (%d)", event->enc_change.status == 0 ? "on" : "failed", event->enc_change.status);
+        if (event->enc_change.status == 0 && pairing()) {
+            pairing_until_us = 0;
+            ESP_LOGI(TAG, "pairing mode: a new device paired");
+        }
         if (event->enc_change.status == 0 && ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0) {
             vk_status_t *s = status_begin();
             s->ble = "connected";
@@ -383,6 +400,13 @@ static void typing_task(void *arg)
     job_t job;
     for (;;) {
         if (xQueueReceive(jobs, &job, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            if (pairing_until_us && !pairing()) {  // the window ended without a new device
+                pairing_until_us = 0;
+                ESP_LOGI(TAG, "pairing mode ended");
+                if (!connected) {
+                    advertise();
+                }
+            }
             // A drag whose release never came (the phone lost its connection).
             if (held_buttons && esp_timer_get_time() - last_pointer_us > DRAG_TIMEOUT_US && connected) {
                 held_buttons = 0;
@@ -534,6 +558,24 @@ void ble_set_enabled(bool on)
         }
     }
     advertise();  // on: a paired device reconnects by itself; off: reports "off"
+}
+
+void ble_pairing_mode(int seconds)
+{
+    pairing_until_us = esp_timer_get_time() + seconds * 1000000LL;
+    ESP_LOGI(TAG, "pairing mode for %d s: add \"%s\" on the new device", seconds, name);
+    enabled = true;
+    struct ble_gap_conn_desc desc;
+    bool dropped = false;
+    for (uint16_t handle = 0; handle < 8; handle++) {
+        if (ble_gap_conn_find(handle, &desc) == 0) {
+            ble_gap_terminate(handle, BLE_ERR_REM_USER_CONN_TERM);
+            dropped = true;
+        }
+    }
+    if (!dropped) {
+        advertise();  // otherwise the disconnect event does
+    }
 }
 
 void ble_forget(void)

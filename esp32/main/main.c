@@ -61,7 +61,8 @@ void status_end(void)
 {
     static int reported = -1;  // Bluetooth as last told to the server: 0 waiting, 1 connected, 2 off
     cJSON *s = status_json_locked();
-    int ble = strcmp(status.ble, "connected") == 0 ? 1 : strcmp(status.ble, "off") == 0 ? 2 : 0;
+    int ble = strcmp(status.ble, "connected") == 0 ? 1 : strcmp(status.ble, "off") == 0 ? 2
+            : strcmp(status.ble, "pairing") == 0 ? 3 : 0;
     bool changed = ble != reported;
     reported = ble;
     xSemaphoreGive(status_lock);
@@ -71,12 +72,13 @@ void status_end(void)
     }
 }
 
-bool status_ble_off(void)
+const char *status_ble_report(void)  // for the server: connected, waiting, off, pairing
 {
     xSemaphoreTake(status_lock, portMAX_DELAY);
-    bool off = strcmp(status.ble, "off") == 0;
+    const char *r = strcmp(status.ble, "connected") == 0 ? "connected" : strcmp(status.ble, "off") == 0 ? "off"
+                  : strcmp(status.ble, "pairing") == 0 ? "pairing" : "waiting";
     xSemaphoreGive(status_lock);
-    return off;
+    return r;
 }
 
 bool status_ble_connected(void)

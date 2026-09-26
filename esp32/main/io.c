@@ -55,7 +55,8 @@ static int log_vprintf(const char *format, va_list args)
         // Errors and warnings also go to the server (after a colour code, if any).
         const char *p = buf[0] == '\x1b' ? strchr(buf, 'm') : NULL;
         p = p ? p + 1 : buf;
-        if ((p[0] == 'E' || p[0] == 'W') && p[1] == ' ' && p[2] == '(') {
+        bool line = (p[0] == 'E' || p[0] == 'W' || p[0] == 'I') && p[1] == ' ' && p[2] == '(';
+        if (line && (p[0] != 'I' || net_log_streaming())) {
             net_report_log(p);
         }
     }

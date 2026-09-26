@@ -57,7 +57,7 @@ vk_status_t *status_begin(void);  // locks the status for a change ...
 void status_end(void);            // ... then unlocks and pushes it to the page
 void status_emit(void);
 bool status_ble_connected(void);
-bool status_ble_off(void);
+const char *status_ble_report(void);  // connected, waiting, off, pairing
 
 // Wi-Fi and the backend connection.
 void net_start(void);
@@ -65,13 +65,15 @@ void net_apply(bool wifi_changed, bool server_changed);  // after the settings c
 cJSON *net_scan(void);                                   // array of {ssid, rssi, secure}
 const char *vk_machine_id(void);
 void net_ble_changed(void);  // tells the server whether a computer is connected over Bluetooth
-void net_report_log(const char *line);  // an error or warning line, sent to the server when connected
+void net_report_log(const char *line);  // a log line for the server (errors always, the rest for a live log)
+bool net_log_streaming(void);           // the web app's live log is open
 
 // Bluetooth LE keyboard.
 void ble_start(void);
 void ble_set_name(const char *name);
 void ble_forget(void);
-void ble_set_enabled(bool on);  // off: disconnect and stop advertising, until on (or a restart)
+void ble_set_enabled(bool on);
+void ble_pairing_mode(int seconds);  // drop the connection; refuse paired devices until a new one pairs  // off: disconnect and stop advertising, until on (or a restart)
 void ble_type(const char *text);             // queued; typed in order
 void ble_key(const char *key, const char *state);
 // Touchpad: action "move" or "scroll" (dx, dy), or "click" (button left/right/middle).

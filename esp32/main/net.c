@@ -54,6 +54,7 @@ typedef enum {
     EV_ROAM_CHECK,
     EV_BLE,          // Bluetooth connected or lost: tell the server
     EV_PING,         // heartbeat timer
+    EV_LOG,          // lines for an open live log
 } net_event_t;
 
 static QueueHandle_t events;
@@ -87,10 +88,17 @@ static const char *chip_name(void);
 
 // Error and warning lines for the server (GET /api/client-errors). The log
 // hook only copies them here; net_task sends them, so sending cannot recurse.
-#define LOG_SLOTS 8
+#define LOG_SLOTS 24
 #define LOG_LINE_MAX 200
 static char log_ring[LOG_SLOTS][LOG_LINE_MAX];
 static int log_head, log_count;
+static volatile int64_t log_stream_until_us;  // the web app's live log is open
+static volatile bool log_send_pending;
+
+bool net_log_streaming(void)
+{
+    return log_stream_until_us && esp_timer_get_time() < log_stream_until_us;
+}
 static portMUX_TYPE log_lock = portMUX_INITIALIZER_UNLOCKED;
 
 void net_report_log(const char *line)
@@ -119,6 +127,10 @@ void net_report_log(const char *line)
         log_count++;
     }
     taskEXIT_CRITICAL(&log_lock);
+    if (net_log_streaming() && !log_send_pending) {  // live: send now, not at the next heartbeat
+        log_send_pending = true;
+        post(EV_LOG);
+    }
 }
 
 static void send_log_reports(void)
@@ -140,7 +152,8 @@ static void send_log_reports(void)
         snprintf(message, sizeof message, "%s %s: %s", esp_app_get_description()->version, chip_name(), line);
         cJSON *m = cJSON_CreateObject();
         cJSON_AddStringToObject(m, "type", "log");
-        cJSON_AddStringToObject(m, "level", "error");
+        // Errors and warnings are kept by the server; other lines only go to an open live log.
+        cJSON_AddStringToObject(m, "level", line[0] == 'E' || line[0] == 'W' ? "error" : "info");
         cJSON_AddStringToObject(m, "message", message);
         char *text = cJSON_PrintUnformatted(m);
         cJSON_Delete(m);
@@ -158,7 +171,7 @@ static void send_ble_status(void)
     }
     char text[64];
     int n = snprintf(text, sizeof text, "{\"type\":\"status\",\"bluetooth\":\"%s\"}",
-                     status_ble_connected() ? "connected" : status_ble_off() ? "off" : "waiting");
+                     status_ble_report());
     esp_websocket_client_send_text(ws, text, n, pdMS_TO_TICKS(2000));
 }
 
@@ -413,6 +426,12 @@ static void handle_message(const char *text)
         if (key) {
             ble_key(key, state ? state : "press");
         }
+    } else if (strcmp(type, "pairing") == 0) {
+        int seconds = (int)cJSON_GetNumberValue(cJSON_GetObjectItem(m, "seconds"));
+        ble_pairing_mode(seconds >= 10 && seconds <= 600 ? seconds : 120);
+    } else if (strcmp(type, "logs") == 0) {
+        log_stream_until_us = cJSON_IsTrue(cJSON_GetObjectItem(m, "on")) ? esp_timer_get_time() + 600 * 1000000LL : 0;
+        ESP_LOGI(TAG, "live log %s", log_stream_until_us ? "on (10 min at most)" : "off");
     } else if (strcmp(type, "bluetooth") == 0) {
         ble_set_enabled(cJSON_IsTrue(cJSON_GetObjectItem(m, "on")));
     } else if (strcmp(type, "pointer") == 0) {
@@ -664,6 +683,10 @@ static void net_task(void *arg)
             break;
         case EV_BLE:  // also sent right after "ready": a good moment for the error reports too
             send_ble_status();
+            send_log_reports();
+            break;
+        case EV_LOG:
+            log_send_pending = false;
             send_log_reports();
             break;
         case EV_PING:

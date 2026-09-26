@@ -595,6 +595,7 @@ async def backend_type(request: Request):
 
 
 CLIENT_ERRORS_PER_MINUTE = 30  # per connection, so a broken client cannot flood the database
+LIVE_LOG_PER_SECOND = 20       # lines relayed to an open live log, per connection
 
 
 @app.get("/api/client-errors")
@@ -613,6 +614,33 @@ async def client_errors(request: Request):
     return {"errors": [{"at": r["at"], "message": r["message"], "device": r["device_id"], "client": r["name"],
                         "platform": r["platform"], "version": r["version"], **({"user": r["username"]} if everyone else {})}
                        for r in rows]}
+
+
+def esp32_socket(user, device_id: int) -> WebSocket:
+    device = store.device(user["id"], device_id)
+    if not device or not (device["platform"] or "").upper().startswith("ESP32"):
+        raise HTTPException(404, "No such ESP32 board")
+    ws = room_for(user).devices.get(device_id)
+    if ws is None:
+        raise HTTPException(409, "The board is offline")
+    return ws
+
+
+@app.post("/api/devices/{device_id}/pairing")
+async def device_pairing(device_id: int, request: Request):
+    """ESP32: pairing mode for two minutes. It drops its connection and refuses
+    devices it was paired with, so a new device can find and pair it."""
+    user = require_user(request)
+    await esp32_socket(user, device_id).send_json({"type": "pairing", "seconds": 120})
+    return {"ok": True, "seconds": 120}
+
+
+@app.post("/api/devices/{device_id}/logs")
+async def device_logs(device_id: int, request: Request):
+    """ESP32: ?on=1 streams its log lines to the web app (as device-log events) for up to 10 minutes; ?on=0 stops."""
+    user = require_user(request)
+    await esp32_socket(user, device_id).send_json({"type": "logs", "on": request.query_params.get("on") == "1"})
+    return {"ok": True}
 
 
 @app.post("/api/devices/{device_id}/bluetooth")
@@ -919,6 +947,9 @@ async def keyboard(ws: WebSocket):
     server -> {"type":"bluetooth","on":false}   ESP32: drop and stop offering the Bluetooth keyboard
               (a tablet then shows its on-screen keyboard); true offers it again
     client -> {"type":"log","level":"error","message":"…"}   an error on the client, stored for troubleshooting
+    client -> {"type":"log","level":"info","message":"…"}    ESP32, while its live log is open: relayed, not stored
+    server -> {"type":"pairing","seconds":120}   ESP32: drop the connection and refuse paired devices until a new one pairs
+    server -> {"type":"logs","on":true}          ESP32: stream all log lines (10 minutes at most)
     The token is the account's install token (first pairing), the device's
     credential, or a credential issued before accounts existed.
     """
@@ -969,6 +1000,7 @@ async def keyboard(ws: WebSocket):
         if room.selected == device["id"]:
             await flush_pending(room, ws)
         error_times: list[float] = []
+        info_times: list[float] = []
         while True:
             message = await ws.receive()
             if message.get("type") == "websocket.disconnect":
@@ -977,6 +1009,14 @@ async def keyboard(ws: WebSocket):
                 data = json.loads(message["text"])
                 if data.get("type") == "ping":
                     await ws.send_json({"type": "pong"})
+                elif data.get("type") == "log" and data.get("level") == "info":
+                    # A line for the live log in the web app (ESP32): passed on, not kept.
+                    now = time.monotonic()
+                    info_times[:] = [t for t in info_times if now - t < 1][-LIVE_LOG_PER_SECOND:]
+                    if len(info_times) < LIVE_LOG_PER_SECOND:
+                        info_times.append(now)
+                        room.broadcast({"type": "device-log", "device": device["id"], "level": "info",
+                                        "line": str(data.get("message") or "")[:300]})
                 elif data.get("type") == "log" and data.get("level") == "error":
                     # Error reports from the client, kept per client (GET /api/client-errors).
                     now = time.monotonic()
@@ -985,8 +1025,9 @@ async def keyboard(ws: WebSocket):
                         error_times.append(now)
                         text = str(data.get("message") or "")[:1000]
                         store.add_client_error(device["id"], text)
+                        room.broadcast({"type": "device-log", "device": device["id"], "level": "error", "line": text[:300]})
                         log.warning("Client %r (%s) reported: %s", device["name"], device["platform"], text)
-                elif data.get("type") == "status" and data.get("bluetooth") in ("connected", "waiting", "off"):
+                elif data.get("type") == "status" and data.get("bluetooth") in ("connected", "waiting", "off", "pairing"):
                     room.bluetooth[device["id"]] = data["bluetooth"]
                     room.broadcast({"type": "devices"})
     except (WebSocketDisconnect, ValueError, KeyError):
@@ -1140,6 +1181,7 @@ async def events(ws: WebSocket):
     server -> {"type":"segment","owner":"...","text":"..."} / {"type":"level","owner":"...","v":0.4}
     server -> {"type":"devices"}  the client list changed; fetch /api/status
     server -> {"type":"prefs","touchpad":true}  an account preference changed (POST /api/prefs)
+    server -> {"type":"device-log","device":2,"level":"info","line":"…"}  a line from an ESP32's live log
     client -> {"type":"stop"} or {"type":"cancel"}  to end another device's dictation
     client -> {"type":"pointer","action":"move"|"scroll","dx":3,"dy":-1} or
               {"type":"pointer","action":"click"|"press"|"release","button":"left"|"right"|"middle"}
