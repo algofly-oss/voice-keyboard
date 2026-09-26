@@ -239,6 +239,12 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .cp-scroll>*{flex-shrink:0}  /* scroll, never squash the buttons */
 .cp-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:12px;margin:0 -4px;padding:0 4px}
 .client-panel .board-log{height:clamp(120px,26dvh,260px);flex:none}
+/* Wider screens: a centred dialog, not a second sheet stacked on the Settings sheet. */
+@media (min-width:640px){
+  .client-panel{inset:0;margin:auto;width:min(480px,calc(100vw - 48px));height:auto;max-height:min(80vh,640px)}
+  .client-panel .ask-box{height:auto;max-height:min(80vh,640px);border-radius:16px;border-bottom:1px solid var(--border-soft);padding:20px}
+  .client-panel .board-log{height:200px}
+}
 .client-panel .btn{height:44px;min-width:0;white-space:nowrap}
 .client-panel .btn>span,.cp-row>.btn{overflow:hidden;text-overflow:ellipsis}
 .cp-head{display:flex;align-items:center;gap:10px}.cp-head h2{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
