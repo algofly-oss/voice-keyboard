@@ -236,9 +236,11 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .client-panel{position:fixed;inset:auto 0 0 0;margin:0 auto;width:100%;max-width:520px;height:min(88dvh,720px);max-height:none;padding:0}
 .client-panel .ask-box{height:100%;box-sizing:border-box;gap:12px;border-radius:20px 20px 0 0;border-bottom:0;
   padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);overflow:hidden}
+.cp-scroll>*{flex-shrink:0}  /* scroll, never squash the buttons */
 .cp-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:12px;margin:0 -4px;padding:0 4px}
 .client-panel .board-log{height:clamp(120px,26dvh,260px);flex:none}
-.client-panel .btn{height:44px}
+.client-panel .btn{height:44px;min-width:0;white-space:nowrap}
+.client-panel .btn>span,.cp-row>.btn{overflow:hidden;text-overflow:ellipsis}
 .cp-head{display:flex;align-items:center;gap:10px}.cp-head h2{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cp-head .icon-mini{flex:none;width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
 .cp-fields{display:flex;flex-direction:column;gap:8px}
@@ -491,7 +493,7 @@ html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),
       <button type="button" class="btn primary" id="cpPair"><i data-i="bluetooth"></i><span>Pairing mode</span></button>
       <div class="cp-row">
         <button type="button" class="btn secondary" id="cpBtToggle">Turn off</button>
-        <button type="button" class="btn secondary" id="cpForget">Forget paired devices</button>
+        <button type="button" class="btn secondary" id="cpForget" title="Forget every device paired with this board">Forget pairings</button>
       </div>
       <div class="board-log-head"><span>Live log</span><span class="hint" id="cpLogState"></span></div>
       <pre class="board-log" id="cpLog" aria-live="off"></pre>
@@ -1309,7 +1311,7 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     $('#cpTitle').textContent=d.name;
     $('#cpIcon').innerHTML=LOGOS[p.kind]?`<svg class="logo" viewBox="0 0 24 24" aria-hidden="true">${LOGOS[p.kind]}</svg>`:svg('monitor');
     $('#cpInfo').textContent=[p.label,d.version&&'v'+d.version,d.mac,d.online?'online':d.lastSeen?'last seen '+ago(d.lastSeen):'never connected',d.selected&&'active client'].filter(Boolean).join(' · ');
-    $('#cpUpdate').hidden=!d.outdated;$('#cpUpdate').textContent=updating.has(d.id)?'Updating…':`Update to ${d.latest}`;$('#cpUpdate').disabled=updating.has(d.id);
+    $('#cpUpdate').hidden=!d.outdated;$('#cpUpdate').textContent=updating.has(d.id)?'Updating…':'Update';$('#cpUpdate').title=`Update to ${d.latest}`;$('#cpUpdate').disabled=updating.has(d.id);
     $('#cpBoard').hidden=!esp;if(!esp)return;
     const left=Math.max(0,Math.ceil((pairingUntil-Date.now())/1000));
     $('#cpBt').textContent=!d.online?'The board is offline.'
