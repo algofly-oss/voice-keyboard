@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>/* Held sideways from the first frame (see applyOrientation), not one frame later. */
-if(matchMedia('(pointer: coarse)').matches&&matchMedia('(orientation: landscape)').matches)document.documentElement.classList.add('landscape')</script>
+{const coarse=matchMedia('(pointer: coarse)').matches,h=document.documentElement;if(!coarse)h.classList.add('desk');
+if(matchMedia(coarse?'(orientation: landscape)':'(min-width: 760px) and (min-height: 560px)').matches)h.classList.add('landscape')}</script>
 <meta name="theme-color" content="#1e1f22">
 <meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -457,6 +458,13 @@ html.landscape .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex
 html.landscape .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html.landscape .discard{height:28px}
 html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),52px);gap:6px}
+/* A computer's window, wide enough: the tablet-sideways layout, in an iPad's
+   shape (1180 × 820), as large as the window allows and centred. The keys
+   grow with it, as they would on a bigger iPad. */
+html.desk.landscape .app{max-width:min(100vw,calc(100dvh * 1180 / 820))}
+html.desk.landscape .vkb{--kh:clamp(28px,calc(100dvh * 52 / 820),76px)}
+html.desk.landscape .vk{font-size:clamp(20px,calc(100dvh * 20 / 820),28px)}
+
 /* A phone held sideways: the top-bar switch (#viewChip) shows the keyboard or the
    touchpad in the space below the status line (a tablet has room for both). */
 #viewChip{display:none;color:var(--muted)}  /* the gray of a chip that is fine, like the server's */
@@ -1281,9 +1289,12 @@ const touchDevice=matchMedia('(pointer: coarse)').matches;
 // sliding toolbars, which made resize-based checks flip during a rotation),
 // applied once per real change.
 const landscapeQuery=matchMedia('(orientation: landscape)');
-function applyOrientation(){const want=touchDevice&&landscapeQuery.matches,html=document.documentElement;
+// A computer's window: the tablet-sideways layout once it is wide enough (see html.desk).
+const deskQuery=matchMedia('(min-width: 760px) and (min-height: 560px)');
+function applyOrientation(){const want=touchDevice?landscapeQuery.matches:deskQuery.matches,html=document.documentElement;
   if(html.classList.contains('landscape')!==want)requestAnimationFrame(()=>html.classList.toggle('landscape',want))}
 landscapeQuery.addEventListener('change',applyOrientation);
+deskQuery.addEventListener('change',applyOrientation);
 applyOrientation();
 // An app, not a document: no pinch-zooming the whole page on phones and tablets.
 if(touchDevice)['gesturestart','gesturechange'].forEach(n=>document.addEventListener(n,e=>e.preventDefault(),{passive:false}));
