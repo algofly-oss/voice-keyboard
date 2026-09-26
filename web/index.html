@@ -678,7 +678,6 @@ const ICONS={
   square:'<rect x="5" y="5" width="14" height="14" rx="3"/>',
   settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   touchpad:'<rect width="18" height="16" x="3" y="4" rx="2"/><path d="M3 15h18M12 15v5"/>',
-  keycaps:'<rect width="5" height="5" x="3" y="6" rx="1"/><rect width="5" height="5" x="9.5" y="6" rx="1"/><rect width="5" height="5" x="16" y="6" rx="1"/><rect width="5" height="5" x="3" y="13" rx="1"/><rect width="11.5" height="5" x="9.5" y="13" rx="1"/>',  // the on-screen keyboard (not the Bluetooth keyboard chip)
   keyboard:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>',
   download:'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
   bluetooth:'<path d="m7 7 10 10-5 5V2l5 5L7 17"/>',
@@ -1163,7 +1162,7 @@ function renderVkb(){
 renderVkb();applyTouchpad();  // with the settings sent with the page, before the first frame
 // Phone held sideways: the keyboard or the touchpad (#viewChip), remembered on this device.
 function applyLandscapeView(pad){$('.app').classList.toggle('pad-view',pad);
-  $('#viewChip').innerHTML=svg(pad?'keycaps':'touchpad');$('#viewChip').setAttribute('aria-label',pad?'Show the keyboard':'Show the touchpad')}
+  $('#viewChip').innerHTML=svg(pad?'keyboard':'touchpad');$('#viewChip').setAttribute('aria-label',pad?'Show the keyboard':'Show the touchpad')}
 {let pad=false;try{pad=localStorage.getItem('vk.landscapeView')==='pad'}catch{}applyLandscapeView(pad);
   $('#viewChip').addEventListener('click',()=>{const next=!$('.app').classList.contains('pad-view');applyLandscapeView(next);
     try{localStorage.setItem('vk.landscapeView',next?'pad':'keyboard')}catch{}})}
