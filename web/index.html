@@ -681,7 +681,7 @@ const $=s=>document.querySelector(s);
 const app=$('#app'),mic=$('#mic'),statusEl=$('#status'),timerEl=$('#timer'),wave=$('#wave'),halo=$('#halo');
 const BARS=31;for(let i=0;i<BARS;i++)wave.appendChild(document.createElement('span'));
 const bars=[...wave.children];
-let cfg={},deviceStatus={},state='idle';
+let cfg={...(window.VK_PREFS||{})},deviceStatus={},state='idle';  // VK_PREFS: the account's settings, sent with the page
 // Switch settings are saved as '1'/'0' (and come as booleans from the server); '0' is truthy, so never test them with !!.
 const isOn=v=>v===true||v==='1'||v===1;
 

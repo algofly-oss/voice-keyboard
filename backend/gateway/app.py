@@ -389,9 +389,18 @@ async def instance():
 @app.get("/", include_in_schema=False)
 async def web_ui(request: Request):
     html = WEB_SOURCE.read_text(encoding="utf-8")
-    if not sessions.user(request.cookies.get("vk_session")):
+    if not (user := sessions.user(request.cookies.get("vk_session"))):
         # Signed out: the page starts on the sign-in screen, not the keyboard it would briefly show.
         html = html.replace('<html lang="en" class="backend-mode">', '<html lang="en" class="backend-mode signed-out">', 1)
+    else:
+        # Signed in: the first frame already has the account's layout (touchpad, F-keys),
+        # instead of the default microphone until /api/settings answers.
+        prefs = account_prefs(user)
+        html = html.replace("<head>", f"<head><script>window.VK_PREFS={json.dumps(prefs)}</script>", 1)
+        if prefs["touchpad"]:
+            html = html.replace('<div class="app" id="app">', '<div class="app touchpad-on" id="app">', 1).replace(
+                '<div class="touchpad" id="touchpad" role="application" aria-label="Touchpad" hidden>',
+                '<div class="touchpad" id="touchpad" role="application" aria-label="Touchpad">', 1)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
