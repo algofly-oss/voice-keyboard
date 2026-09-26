@@ -458,10 +458,11 @@ html.landscape .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex
 html.landscape .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html.landscape .discard{height:28px}
 html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),52px);gap:6px}
-/* A computer's window, wide enough: the tablet-sideways layout, in an iPad's
-   shape (1180 × 820), as large as the window allows and centred. The keys
-   grow with it, as they would on a bigger iPad. */
-html.desk.landscape .app{max-width:min(100vw,calc(100dvh * 1180 / 820))}
+/* A computer's window, wide enough: the tablet-sideways layout. It uses the
+   full width up to a laptop's (a 16" MacBook is 1728 wide); a wider monitor
+   gets an iPad's shape (1180 × 820) as large as fits, centred. The keys grow
+   with the height, as they would on a bigger iPad. */
+html.desk.landscape .app{max-width:max(1800px,calc(100dvh * 1180 / 820))}
 html.desk.landscape .vkb{--kh:clamp(28px,calc(100dvh * 52 / 820),76px)}
 html.desk.landscape .vk{font-size:clamp(20px,calc(100dvh * 20 / 820),28px)}
 
