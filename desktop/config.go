@@ -19,6 +19,11 @@ type config struct {
 	Server     string `json:"server"`
 	Client     string `json:"client"`
 	Credential string `json:"credential"`
+	// From the server on every connection (servers.go): its other addresses,
+	// its instance id and its local CA.
+	Servers  []string `json:"servers,omitempty"`
+	Instance string   `json:"instance,omitempty"`
+	CA       string   `json:"ca,omitempty"`
 	// Typing preferences, changed with `vkeyboard config`.
 	Method  string `json:"method,omitempty"`        // "type" (default) or "paste"
 	DelayMs *int   `json:"typingDelayMs,omitempty"` // nil: the platform default
@@ -32,6 +37,7 @@ type state struct {
 	LastError string    `json:"lastError,omitempty"`
 	Warning   string    `json:"warning,omitempty"`  // e.g. missing typing permission
 	Selected  *bool     `json:"selected,omitempty"` // whether the web app picked this computer to type
+	Server    string    `json:"server,omitempty"`   // the address connected to
 }
 
 func (s state) running() bool { return s.PID > 0 && processAlive(s.PID) }

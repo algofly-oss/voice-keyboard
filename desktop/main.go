@@ -147,12 +147,12 @@ func statusCommand() error {
 		return nil
 	}
 	s := readState()
-	fmt.Printf("Client:     %s\nServer:     %s\n", cfg.Client, cfg.Server)
+	fmt.Printf("Client:     %s\nServer:     %s\n", cfg.Client, strings.Join(candidates(cfg), ", "))
 	switch {
 	case !s.running():
 		fmt.Println("Running:    no (start it with: vkeyboard start)")
 	case s.Connected:
-		fmt.Printf("Running:    yes, connected since %s\n", s.Since.Local().Format("Jan 2 15:04"))
+		fmt.Printf("Running:    yes, connected to %s since %s\n", s.Server, s.Since.Local().Format("Jan 2 15:04"))
 		if s.Selected != nil {
 			fmt.Printf("Typing:     %s\n", map[bool]string{true: "yes, this is the active client",
 				false: "no, another client is active (Settings → Clients in the web app)"}[*s.Selected])

@@ -148,6 +148,11 @@ hostname at **HTTP** `<server-lan-ip>:<HTTP_PORT>`, for example
          noTLSVerify: true
    ```
 
+**Keep using the LAN at home.** List both addresses in `VK_URLS`, for example
+`VK_URLS=https://192.168.1.20:8272,https://voice.example.com`: clients then
+connect over the LAN when they can and through the tunnel otherwise, and the
+web UI moves to the LAN address on its own (README → "Several addresses").
+
 With `VK_PROTOCOL=https`, the service must be **HTTPS**. Plain HTTP only returns
 the redirect to HTTPS, which the browser follows back through Cloudflare, and
 it loops (`ERR_TOO_MANY_REDIRECTS`). Use option A to send plain HTTP.

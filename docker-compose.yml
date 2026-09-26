@@ -33,6 +33,7 @@ x-transcription: &transcription
   volumes:
     - ./backend/volumes/huggingface:/root/.cache/huggingface
     - ./backend/volumes/gateway:/data
+    - ./backend/volumes/caddy:/caddy:ro  # the local CA, for clients using a local address
   healthcheck:
     test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
     interval: 30s

@@ -43,6 +43,14 @@ login until you run `stop`. It never gives up on the server: every failure
 (network change, server restart, a display that isn't ready yet at login) is
 retried with back-off.
 
+**Several server addresses** (`VK_URLS` on the server, e.g. the LAN address
+and a Cloudflare name): the client learns them on connect, keeps them in its
+config, and connects to the fastest local address that answers with the same
+server id, else to a public one. While on a public address it re-checks the
+local ones every 15 s and moves over as soon as one answers. `status` lists
+the addresses and the one in use. Local certificates are checked against the
+server's CA (sent by the server), so no `--trust-local-ca` is needed for this.
+
 Each client appears in the web UI under **Settings → Clients** with its
 name, OS/CPU, and version. Only the active one types, and `status` shows
 whether this client is it. Logs roll over at 1 MB and keep three files

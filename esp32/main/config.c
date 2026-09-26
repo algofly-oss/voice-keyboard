@@ -31,6 +31,7 @@ void config_load(void)
     get_str(nvs, "server", vk_cfg.server, sizeof vk_cfg.server);
     get_str(nvs, "token", vk_cfg.token, sizeof vk_cfg.token);
     get_str(nvs, "name", vk_cfg.name, sizeof vk_cfg.name);
+    get_str(nvs, "urls", vk_cfg.urls, sizeof vk_cfg.urls);
     size_t len = 0;
     if (nvs_get_str(nvs, "ca", NULL, &len) == ESP_OK && len > 1) {
         vk_cfg.ca = malloc(len);
@@ -53,6 +54,7 @@ bool config_save(void)
     if (!err) err = nvs_set_str(nvs, "server", vk_cfg.server);
     if (!err) err = nvs_set_str(nvs, "token", vk_cfg.token);
     if (!err) err = nvs_set_str(nvs, "name", vk_cfg.name);
+    if (!err) err = nvs_set_str(nvs, "urls", vk_cfg.urls);
     if (!err) err = vk_cfg.ca ? nvs_set_str(nvs, "ca", vk_cfg.ca) : nvs_erase_key(nvs, "ca");
     if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;  // erasing a CA that was never saved
     if (!err) err = nvs_commit(nvs);

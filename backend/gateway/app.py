@@ -89,6 +89,24 @@ WEB_DIR = BASE_DIR / "static"
 CLIENT_DIR = BASE_DIR / "desktop"
 RELEASES_DIR = Path(os.environ.get("RELEASES_DIR", "/data/releases"))
 WEB_SOURCE = Path(os.environ.get("WEB_SOURCE", "/opt/web/index.html"))
+# Every address of this deployment (VK_URLS, comma-separated), e.g. the LAN
+# address and a Cloudflare name. Clients learn them on connect and use the
+# fastest one they can reach, preferring local addresses.
+SERVER_URLS = [u.strip().rstrip("/") for u in os.environ.get("VK_URLS", "").split(",")
+               if re.match(r"^https?://[^\s/]+$", u.strip().rstrip("/"))]
+# Identifies this deployment, so a client can tell that an address leads to
+# the same server (derived from the secret, which it does not reveal).
+INSTANCE_ID = hashlib.sha256(b"vkeyboard-instance:" + SESSION_SECRET.encode()).hexdigest()[:24]
+# Caddy's local CA (mounted read-only): clients trust it for local addresses.
+LOCAL_CA_FILE = Path(os.environ.get("LOCAL_CA_FILE", "/caddy/caddy/pki/authorities/local/root.crt"))
+
+
+def local_ca_pem() -> str:
+    try:
+        pem = LOCAL_CA_FILE.read_text()
+    except OSError:
+        return ""
+    return pem if "BEGIN CERTIFICATE" in pem else ""
 if not WEB_SOURCE.exists():
     WEB_SOURCE = BASE_DIR.parent.parent / "web" / "index.html"
 
@@ -320,6 +338,16 @@ app = FastAPI(title="Voice keyboard gateway", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+@app.middleware("http")
+async def private_network_access(request: Request, call_next):
+    """Lets the web app on a public address check a local address (/api/instance):
+    Chrome asks the local server first whether a public page may reach it."""
+    response = await call_next(request)
+    if request.headers.get("access-control-request-private-network"):
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
+
 def api_key_user(token: str | None):
     """The optional API_KEY acts as the admin account (scripts, curl)."""
     if RUNTIME_API_KEY and token and secrets.compare_digest(token, RUNTIME_API_KEY):
@@ -350,6 +378,12 @@ async def health():
     except httpx.HTTPError:
         ok = False
     return JSONResponse({"status": "ok" if ok else "starting", "whisper": ok}, status_code=200 if ok else 503)
+
+
+@app.get("/api/instance")
+async def instance():
+    """Which deployment this is and its addresses; clients check the id before switching address."""
+    return JSONResponse({"instance": INSTANCE_ID, "urls": SERVER_URLS}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/", include_in_schema=False)
@@ -758,7 +792,7 @@ async def backend_settings(request: Request):
     user = require_user(request)
     return {"liveTyping": True, "language": DEFAULT_LANGUAGE, "afterText": "none", "maxSeconds": 600,
             "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe",
-            "pace": DEFAULT_PACE, **account_prefs(user),
+            "pace": DEFAULT_PACE, **account_prefs(user), "urls": SERVER_URLS, "bestAddress": True,
             # With Caddy's local CA, install commands trust it on first contact.
             "localCa": os.environ.get("VK_PROTOCOL", "https") in ("https", "both") and os.environ.get("VK_TLS", "internal") == "internal"}
 
@@ -952,7 +986,8 @@ async def keyboard(ws: WebSocket):
     """A desktop client of one account; it types that account's dictation when selected.
 
     client -> {"type":"hello","client":"<name>","machine":"<stable id>","platform":"linux/amd64","version":"1.2.0"}
-    server -> {"type":"ready","device":7,"client":"<name>","credential":"…","selected":true}
+    server -> {"type":"ready","device":7,"client":"<name>","credential":"…","selected":true,
+               "urls":["https://192.168.1.10","https://vk.example.com"],"instance":"…","ca":"<PEM or empty>"}
     server -> {"type":"selected","selected":false}      when the user picks another computer
     server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
     server -> {"type":"update","version":"1.5.3","url":"/client/…","sha256":"…","size":…,"manual":false}
@@ -1008,7 +1043,8 @@ async def keyboard(ws: WebSocket):
             asyncio.create_task(old.close(code=4000, reason="Replaced by a newer connection"))
         room.devices[device["id"]] = ws
         await ws.send_json({"type": "ready", "device": device["id"], "client": device["name"],
-                            "credential": credential, "selected": room.selected == device["id"]})
+                            "credential": credential, "selected": room.selected == device["id"],
+                            "urls": SERVER_URLS, "instance": INSTANCE_ID, "ca": local_ca_pem()})
         if AUTO_UPDATE:
             await offer_update(ws, store._one("SELECT * FROM devices WHERE id=?", (device["id"],)))
         await announce_selection(room, skip=ws)

@@ -34,7 +34,7 @@ var (
 	updateFailedAt = map[string]time.Time{} // an automatic retry of a failed version waits an hour
 )
 
-func handleUpdate(server string, u updateOffer) {
+func handleUpdate(server, ca string, u updateOffer) {
 	if !u.Manual && (u.Version == version || version == "dev") {
 		return // current, or a development build that must not be replaced by a release
 	}
@@ -47,14 +47,14 @@ func handleUpdate(server string, u updateOffer) {
 	go func() {
 		defer updating.Unlock()
 		log.Printf("updating %s → %s", version, u.Version)
-		if err := selfUpdate(server, u); err != nil {
+		if err := selfUpdate(server, ca, u); err != nil {
 			updateFailedAt[u.Version] = time.Now()
 			reportError("update to %s failed: %v", u.Version, err)
 		}
 	}()
 }
 
-func selfUpdate(server string, u updateOffer) error {
+func selfUpdate(server, ca string, u updateOffer) error {
 	if !strings.HasPrefix(u.URL, "/client/") || len(u.SHA256) != 64 || u.Size <= 0 {
 		return errors.New("malformed update offer")
 	}
@@ -71,7 +71,7 @@ func selfUpdate(server string, u updateOffer) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient(ca, server).Do(req)
 	if err != nil {
 		return err
 	}

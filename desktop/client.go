@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -20,7 +21,8 @@ import (
 // Protocol (backend /v1/keyboard):
 //
 //	client -> {"type":"hello","client":"<name>","machine":"…","platform":"…","version":"…"}
-//	server -> {"type":"ready","credential":"…"}              credential replaces an install token
+//	server -> {"type":"ready","credential":"…","urls":[…],"instance":"…","ca":"…"}
+//	                                                         credential replaces an install token
 //	server -> {"type":"segment","text":"…"}                  type verbatim
 //	server -> {"type":"key","key":"enter","state":"press"}   press|down|up|hold
 type message struct {
@@ -41,6 +43,10 @@ type message struct {
 	SHA256  string `json:"sha256"`
 	Size    int64  `json:"size"`
 	Manual  bool   `json:"manual"`
+	// type "ready": the deployment's addresses (servers.go)
+	URLs     []string `json:"urls"`
+	Instance string   `json:"instance"`
+	CA       string   `json:"ca"`
 }
 
 const closeBadCredential = 4401
@@ -63,12 +69,12 @@ func keyboardURL(server, token string) (string, error) {
 }
 
 // connect opens the socket and completes the hello/ready handshake.
-func connect(ctx context.Context, server, token, client string) (*websocket.Conn, message, error) {
+func connect(ctx context.Context, server, token, client, ca string) (*websocket.Conn, message, error) {
 	address, err := keyboardURL(server, token)
 	if err != nil {
 		return nil, message{}, err
 	}
-	conn, _, err := websocket.Dial(ctx, address, nil)
+	conn, _, err := websocket.Dial(ctx, address, &websocket.DialOptions{HTTPClient: httpClient(ca, server)})
 	if err != nil {
 		return nil, message{}, err
 	}
@@ -98,7 +104,7 @@ func connect(ctx context.Context, server, token, client string) (*websocket.Conn
 }
 
 func enroll(ctx context.Context, server, token, name string) (config, error) {
-	conn, ready, err := connect(ctx, server, token, name)
+	conn, ready, err := connect(ctx, server, token, name, "")
 	if websocket.CloseStatus(err) == closeBadCredential {
 		return config{}, errors.New("the install command was replaced; copy a fresh one from Settings → Clients")
 	}
@@ -106,7 +112,9 @@ func enroll(ctx context.Context, server, token, name string) (config, error) {
 		return config{}, fmt.Errorf("could not reach %s: %w", server, err)
 	}
 	conn.Close(websocket.StatusNormalClosure, "")
-	return config{Server: server, Client: name, Credential: ready.Credential}, nil
+	cfg := config{Server: server, Client: name, Credential: ready.Credential}
+	learnServers(&cfg, ready)
+	return cfg, nil
 }
 
 // serve keeps a connection open and types what arrives. It never gives up:
@@ -126,12 +134,15 @@ func serve(ctx context.Context, cfg config) error {
 	for {
 		updateState(state{PID: pidSelf(), Since: time.Now()})
 		began := time.Now()
-		err := safeSession(ctx, cfg, kb)
+		err := safeSession(ctx, &cfg, kb)
 		if connectedAt.After(began) {
 			delay = time.Second // it was connected: a drop is retried at once, not after the old back-off
 		}
 		if ctx.Err() != nil {
 			return nil
+		}
+		if errors.Is(err, errSwitching) {
+			continue
 		}
 		reason := err.Error()
 		if websocket.CloseStatus(err) == closeBadCredential {
@@ -149,8 +160,12 @@ func serve(ctx context.Context, cfg config) error {
 	}
 }
 
-// connectedAt is when the last session finished its handshake.
-var connectedAt time.Time
+// connectedAt is when the last session finished its handshake; activeServer
+// is the address it connected to.
+var (
+	connectedAt  time.Time
+	activeServer string
+)
 
 // Errors go to the local log and to the server, which keeps them per client
 // (GET /api/client-errors), so failures on any computer can be looked up in
@@ -222,7 +237,7 @@ func waitForKeyboard(ctx context.Context, cfg config) keyboard {
 }
 
 // safeSession turns a panic inside a session into an error so serve retries.
-func safeSession(ctx context.Context, cfg config, kb keyboard) (err error) {
+func safeSession(ctx context.Context, cfg *config, kb keyboard) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("internal error: %v", r)
@@ -231,30 +246,66 @@ func safeSession(ctx context.Context, cfg config, kb keyboard) (err error) {
 	return session(ctx, cfg, kb)
 }
 
-func session(ctx context.Context, cfg config, kb keyboard) error {
-	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	conn, ready, err := connect(dialCtx, cfg.Server, cfg.Credential, cfg.Client)
-	cancel()
+// session connects to the best address of the server (servers.go) and types
+// what arrives until the connection drops.
+func session(ctx context.Context, cfg *config, kb keyboard) error {
+	var (
+		conn   *websocket.Conn
+		ready  message
+		err    error
+		active string
+	)
+	for _, server := range rankServers(ctx, *cfg) {
+		dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		conn, ready, err = connect(dialCtx, server, cfg.Credential, cfg.Client, cfg.CA)
+		cancel()
+		if err == nil || websocket.CloseStatus(err) == closeBadCredential || ctx.Err() != nil {
+			active = server
+			break
+		}
+		log.Printf("could not connect to %s: %v", server, err)
+	}
 	if err != nil {
 		return err
 	}
 	defer conn.CloseNow()
+	changed := learnServers(cfg, ready)
 	if ready.Credential != "" && ready.Credential != cfg.Credential {
 		// The server upgraded an older credential; keep the new one.
 		cfg.Credential = ready.Credential
-		if err := saveConfig(cfg); err != nil {
-			reportError("could not save the new credential: %v", err)
+		changed = true
+	}
+	if changed {
+		if err := saveConfig(*cfg); err != nil {
+			reportError("could not save the settings from the server: %v", err)
 		}
 	}
+	activeServer = active
 	selected := ready.Selected
 	connectedAt = time.Now()
-	log.Printf("connected to %s (%s)", cfg.Server, selectedText(selected))
+	log.Printf("connected to %s (%s)", active, selectedText(selected))
 	updateState(state{PID: pidSelf(), Connected: true, Since: time.Now(), Selected: &selected})
 
 	// Pings detect a dead connection (sleep, network change) within ~40 s.
 	pingCtx, stopPing := context.WithCancel(ctx)
 	defer stopPing()
 	go sendErrorReports(pingCtx, conn)
+	var switching atomic.Bool
+	go func() { // on a public address: move to a local one once it answers
+		for {
+			select {
+			case <-pingCtx.Done():
+				return
+			case <-time.After(localCheckEvery):
+				if s := betterLocal(pingCtx, *cfg, active); s != "" {
+					log.Printf("%s is reachable; switching to it", s)
+					switching.Store(true)
+					conn.Close(websocket.StatusGoingAway, "switching to a local address")
+					return
+				}
+			}
+		}
+	}()
 	go func() {
 		for {
 			select {
@@ -275,6 +326,9 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 	for {
 		var m message
 		if err := readJSON(ctx, conn, &m); err != nil {
+			if switching.Load() {
+				return errSwitching
+			}
 			return err
 		}
 		switch m.Type {
@@ -296,7 +350,7 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 		case "pointer":
 			handlePointer(m)
 		case "update":
-			handleUpdate(cfg.Server, updateOffer{Version: m.Version, URL: m.URL, SHA256: m.SHA256, Size: m.Size, Manual: m.Manual})
+			handleUpdate(active, cfg.CA, updateOffer{Version: m.Version, URL: m.URL, SHA256: m.SHA256, Size: m.Size, Manual: m.Manual})
 		case "selected":
 			selected := m.Selected
 			log.Print(selectedText(selected))
@@ -315,6 +369,9 @@ func updateState(s state) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	s.Warning = warning
+	if s.Connected {
+		s.Server = activeServer
+	}
 	current = s
 	writeState(s)
 }

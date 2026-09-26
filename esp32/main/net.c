@@ -2,14 +2,24 @@
 //
 // Protocol (the desktop client's, see desktop/client.go):
 //   client -> {"type":"hello","client":"<name>","machine":"…","platform":"…","version":"…"}
-//   server -> {"type":"ready","device":7,"credential":"…","selected":true}
+//   server -> {"type":"ready","device":7,"credential":"…","selected":true,"urls":[…],"ca":"…"}
 //   server -> {"type":"selected","selected":false}
 //   server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
 // The first connection uses the account's install token; the credential in
 // "ready" replaces it, so a new install token later does not unpair the board.
 //
+// Addresses: "ready" lists every address of the server (VK_URLS), e.g. its LAN
+// address and a Cloudflare name, and its local CA. A connection goes to the
+// first local address that accepts a TCP connection, else to a public one;
+// while on a public address, local ones are re-checked on every heartbeat
+// tick (~12 s), so back home the board moves to the LAN within seconds. The
+// credential being accepted shows it is the same deployment (another server
+// rejects it, and the board then goes back to the address it was set up with).
+//
 // One task (net_task) starts and stops the socket; the socket's own event
 // handler only reports to it, as the client cannot be stopped from there.
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -25,6 +35,8 @@
 #include "esp_tls.h"
 #include "esp_websocket_client.h"
 #include "esp_wifi.h"
+#include "lwip/netdb.h"
+#include "lwip/sockets.h"
 #include "sdkconfig.h"
 #include "vk.h"
 
@@ -42,6 +54,9 @@ static const char *TAG = "net";
 #define ROAM_CHECK_MS (30 * 1000)
 #define ROAM_WEAK_RSSI (-67)
 #define ROAM_MARGIN_DB 8
+#define LOCAL_BACKOFF_MS (10 * 60 * 1000)   // after a local address failed
+#define FAILOVER_AFTER 3                     // failed attempts before trying another address
+#define MAX_ADDRESSES 6
 
 typedef enum {
     EV_WIFI_UP,
@@ -55,6 +70,7 @@ typedef enum {
     EV_BLE,          // Bluetooth connected or lost: tell the server
     EV_PING,         // heartbeat timer
     EV_LOG,          // lines for an open live log
+    EV_FAILED,       // a connection attempt failed
 } net_event_t;
 
 static QueueHandle_t events;
@@ -64,13 +80,18 @@ static esp_timer_handle_t reconnect_timer, roam_timer, ping_timer;
 static int64_t ping_sent_us;  // an unanswered ping, or 0
 static volatile bool wifi_up, scanning;
 static int wifi_failures;
-static bool use_ca = true;  // with a saved CA, try it first; fall back to public CAs
+static bool ca_flipped;  // the CA choice for this address failed; try the other one
+static char active[VK_SERVER_MAX + 1];  // the address in use, "" to choose again
+static int failures;                     // failed attempts on it in a row
+static int64_t local_failed_us;          // when a local address last failed
 static char machine[32];
 static volatile bool ready;  // the server accepted us ("ready"); status messages may go out
 
 // Received message being reassembled from frames.
 static char *message;
 static size_t message_len;
+
+static void ws_start(void);
 
 static void post(net_event_t ev)
 {
@@ -407,6 +428,201 @@ static void send_hello(void)
     free(text);
 }
 
+// --- Addresses of the server ---
+
+// host and port of http(s)://host[:port][/…]
+static bool url_host(const char *url, char *host, size_t size, char *port, size_t port_size)
+{
+    bool secure = strncmp(url, "https://", 8) == 0;
+    const char *h = strstr(url, "://");
+    if (!h) {
+        return false;
+    }
+    h += 3;
+    size_t len = strcspn(h, ":/");
+    if (!len || len >= size) {
+        return false;
+    }
+    memcpy(host, h, len);
+    host[len] = '\0';
+    if (h[len] == ':') {
+        size_t plen = strcspn(h + len + 1, "/");
+        if (!plen || plen >= port_size) {
+            return false;
+        }
+        memcpy(port, h + len + 1, plen);
+        port[plen] = '\0';
+    } else {
+        strlcpy(port, secure ? "443" : "80", port_size);
+    }
+    return true;
+}
+
+// A private IP, a .local name or a single-label name.
+static bool is_local(const char *url)
+{
+    char host[VK_SERVER_MAX + 1], port[8];
+    if (!url_host(url, host, sizeof host, port, sizeof port)) {
+        return false;
+    }
+    unsigned a, b, c, d;
+    if (sscanf(host, "%u.%u.%u.%u", &a, &b, &c, &d) == 4) {
+        return a == 10 || a == 127 || (a == 192 && b == 168) || (a == 172 && b >= 16 && b <= 31) ||
+               (a == 169 && b == 254);
+    }
+    size_t n = strlen(host);
+    return strcmp(host, "localhost") == 0 || !strchr(host, '.') || (n > 6 && strcmp(host + n - 6, ".local") == 0);
+}
+
+// Whether the address accepts a TCP connection within 1.5 s (no TLS: cheap on memory).
+static bool reachable(const char *url)
+{
+    char host[VK_SERVER_MAX + 1], port[8];
+    if (!url_host(url, host, sizeof host, port, sizeof port)) {
+        return false;
+    }
+    struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM}, *ai = NULL;
+    if (getaddrinfo(host, port, &hints, &ai) != 0 || !ai) {
+        return false;
+    }
+    bool ok = false;
+    int fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+    if (fd >= 0) {
+        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+        if (connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) {
+            ok = true;
+        } else if (errno == EINPROGRESS) {
+            fd_set w;
+            FD_ZERO(&w);
+            FD_SET(fd, &w);
+            struct timeval tv = {.tv_sec = 1, .tv_usec = 500000};
+            int err = 0;
+            socklen_t len = sizeof err;
+            ok = select(fd + 1, NULL, &w, NULL, &tv) == 1 &&
+                 getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) == 0 && err == 0;
+        }
+        close(fd);
+    }
+    freeaddrinfo(ai);
+    return ok;
+}
+
+// The address the board was set up with, then the ones the server listed.
+static int addresses(char out[][VK_SERVER_MAX + 1])
+{
+    int n = 0;
+    strlcpy(out[n++], vk_cfg.server, VK_SERVER_MAX + 1);
+    const char *p = vk_cfg.urls;
+    while (*p && n < MAX_ADDRESSES) {
+        size_t len = strcspn(p, ",");
+        if (len && len <= VK_SERVER_MAX) {
+            memcpy(out[n], p, len);
+            out[n][len] = '\0';
+            bool seen = false;
+            for (int i = 0; i < n; i++) {
+                seen = seen || strcmp(out[i], out[n]) == 0;
+            }
+            if (!seen) {
+                n++;
+            }
+        }
+        p += len;
+        if (*p == ',') {
+            p++;
+        }
+    }
+    return n;
+}
+
+static bool local_allowed(void)
+{
+    return !local_failed_us || esp_timer_get_time() - local_failed_us > LOCAL_BACKOFF_MS * 1000LL;
+}
+
+// Chooses the address to connect to: a reachable local one, else a public
+// one (the one after `after`, when that failed), else the configured one.
+static void choose_address(const char *after)
+{
+    static char list[MAX_ADDRESSES][VK_SERVER_MAX + 1];
+    int n = addresses(list);
+    char previous[VK_SERVER_MAX + 1];
+    strlcpy(previous, after ? after : "", sizeof previous);
+    ca_flipped = false;
+    failures = 0;
+    if (local_allowed()) {
+        for (int i = 0; i < n; i++) {
+            if (is_local(list[i]) && strcmp(list[i], previous) != 0 && reachable(list[i])) {
+                strlcpy(active, list[i], sizeof active);
+                return;
+            }
+        }
+    }
+    int start = 0;
+    for (int i = 0; i < n; i++) {
+        if (strcmp(list[i], previous) == 0) {
+            start = i + 1;
+        }
+    }
+    for (int k = 0; k < n; k++) {
+        const char *u = list[(start + k) % n];
+        if (!is_local(u) && strcmp(u, previous) != 0) {
+            strlcpy(active, u, sizeof active);
+            return;
+        }
+    }
+    strlcpy(active, vk_cfg.server, sizeof active);
+}
+
+// On a public address: connects to a local one that accepts a connection.
+static bool switch_to_local(void)
+{
+    static char list[MAX_ADDRESSES][VK_SERVER_MAX + 1];
+    int n = addresses(list);
+    for (int i = 0; i < n; i++) {
+        if (is_local(list[i]) && reachable(list[i])) {
+            ESP_LOGI(TAG, "%s is reachable; switching to it", list[i]);
+            strlcpy(active, list[i], sizeof active);
+            ca_flipped = false;
+            failures = 0;
+            ws_start();
+            return true;
+        }
+    }
+    return false;
+}
+
+// Keeps the addresses and local CA that "ready" sends.
+static void learn_addresses(cJSON *m)
+{
+    cJSON *urls = cJSON_GetObjectItem(m, "urls");
+    if (!cJSON_IsArray(urls)) {
+        return;  // an older server
+    }
+    char list[VK_URLS_MAX + 1] = "";
+    cJSON *u;
+    cJSON_ArrayForEach(u, urls) {
+        const char *s = cJSON_GetStringValue(u);
+        if (s && (strncmp(s, "https://", 8) == 0 || strncmp(s, "http://", 7) == 0) && strlen(s) <= VK_SERVER_MAX &&
+            strlen(list) + strlen(s) + 1 < sizeof list) {
+            if (list[0]) {
+                strlcat(list, ",", sizeof list);
+            }
+            strlcat(list, s, sizeof list);
+        }
+    }
+    bool changed = strcmp(list, vk_cfg.urls) != 0;
+    strlcpy(vk_cfg.urls, list, sizeof vk_cfg.urls);
+    const char *ca = cJSON_GetStringValue(cJSON_GetObjectItem(m, "ca"));
+    if (ca && strstr(ca, "BEGIN CERTIFICATE") && (!vk_cfg.ca || strcmp(ca, vk_cfg.ca) != 0)) {
+        vk_cfg.ca = strdup(ca);  // the old copy is not freed: a connection may still point at it
+        changed = true;
+    }
+    if (changed) {
+        config_save();
+        ESP_LOGI(TAG, "addresses of the server: %s", vk_cfg.urls[0] ? vk_cfg.urls : vk_cfg.server);
+    }
+}
+
 static void handle_message(const char *text)
 {
     cJSON *m = cJSON_Parse(text);
@@ -451,13 +667,8 @@ static void handle_message(const char *text)
         s->selected = cJSON_IsTrue(cJSON_GetObjectItem(m, "selected"));
         if (strcmp(type, "ready") == 0) {
             ready = true;
-            if (!use_ca && vk_cfg.ca) {
-                // The server's certificate is publicly trusted (the private CA failed):
-                // forget the CA, so later connections skip the failing first attempt.
-                vk_cfg.ca = NULL;  // not freed: the client config may still point at it
-                config_save();
-                ESP_LOGI(TAG, "public certificate works; the private CA is no longer used");
-            }
+            failures = 0;
+            learn_addresses(m);
             s->server = "connected";
             s->server_error[0] = '\0';
             s->device_id = (int)cJSON_GetNumberValue(cJSON_GetObjectItem(m, "device"));
@@ -496,7 +707,7 @@ static void on_ws(void *arg, esp_event_base_t base, int32_t id, void *data)
     esp_websocket_event_data_t *e = data;
     switch (id) {
     case WEBSOCKET_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "connected to %s", vk_cfg.server);
+        ESP_LOGI(TAG, "connected to %s", active);
         send_hello();
         break;
     case WEBSOCKET_EVENT_DATA:
@@ -546,9 +757,7 @@ static void on_ws(void *arg, esp_event_base_t base, int32_t id, void *data)
         if (id == WEBSOCKET_EVENT_ERROR) {
             ESP_LOGW(TAG, "connection error: %s", why);
             set_server_state("error", why);
-            if (tls) {
-                post(EV_TLS_FAILED);
-            }
+            post(tls ? EV_TLS_FAILED : EV_FAILED);
         } else {
             set_server_state("connecting", NULL);
         }
@@ -577,8 +786,11 @@ static void ws_start(void)
         set_server_state("off", "");
         return;
     }
+    if (!active[0]) {
+        choose_address(NULL);
+    }
     // https://host:port → wss://host:port/v1/keyboard
-    const char *server = vk_cfg.server;
+    const char *server = active;
     bool secure = strncmp(server, "https://", 8) == 0;
     const char *rest = strstr(server, "://");
     rest = rest ? rest + 3 : server;
@@ -601,9 +813,14 @@ static void ws_start(void)
         .buffer_size = 2048,
         .task_stack = 6144,
     };
+    // Local addresses use the local CA first, public ones the public CAs first.
+    bool with_ca = vk_cfg.ca && is_local(server) != ca_flipped;
     if (secure) {
-        if (vk_cfg.ca && use_ca) {
+        if (with_ca) {
             c.cert_pem = vk_cfg.ca;
+            // A local address need not be named in the certificate (an IP left out
+            // of VK_DOMAIN); the deployment's own CA must still have signed it.
+            c.skip_cert_common_name_check = is_local(server);
         } else {
             c.crt_bundle_attach = esp_crt_bundle_attach;
         }
@@ -616,7 +833,7 @@ static void ws_start(void)
     esp_websocket_register_events(ws, WEBSOCKET_EVENT_ANY, on_ws, NULL);
     set_server_state("connecting", "");
     ESP_LOGI(TAG, "connecting to %s (%s)", ws_uri,
-             !secure ? "no TLS" : vk_cfg.ca && use_ca ? "private CA" : "public CAs");
+             !secure ? "no TLS" : with_ca ? "private CA" : "public CAs");
     esp_websocket_client_start(ws);
 }
 
@@ -634,6 +851,7 @@ static void net_task(void *arg)
         }
         switch (ev) {
         case EV_WIFI_UP:
+            active[0] = '\0';  // perhaps another network: choose again
             if (!ws && !rejected) {
                 ws_start();
             }
@@ -664,7 +882,7 @@ static void net_task(void *arg)
         }
         case EV_APPLY_SERVER:
             rejected = false;
-            use_ca = true;
+            active[0] = '\0';
             if (wifi_up) {
                 ws_start();
             } else {
@@ -677,12 +895,41 @@ static void net_task(void *arg)
             }
             break;
         case EV_REJECTED:
+            if (strcmp(active, vk_cfg.server) != 0) {
+                // Another deployment at that address: back to the configured one.
+                ESP_LOGW(TAG, "%s rejected the credential; using %s", active, vk_cfg.server);
+                if (is_local(active)) {
+                    local_failed_us = esp_timer_get_time();
+                }
+                strlcpy(active, vk_cfg.server, sizeof active);
+                ca_flipped = false;
+                failures = 0;
+                ws_start();
+                break;
+            }
             ws_stop();
             rejected = true;
             set_server_state("rejected", "this board was removed or its setup token was replaced; set it up again");
             break;
         case EV_ROAM_CHECK:
             roam_check();
+            break;
+        case EV_FAILED:
+            if (++failures >= FAILOVER_AFTER && ws) {
+                char failed[VK_SERVER_MAX + 1];
+                strlcpy(failed, active, sizeof failed);
+                if (is_local(failed)) {
+                    local_failed_us = esp_timer_get_time();
+                }
+                bool flipped = ca_flipped;
+                choose_address(failed);
+                if (strcmp(active, failed) != 0) {
+                    ESP_LOGW(TAG, "%s does not answer; trying %s", failed, active);
+                    ws_start();
+                } else {
+                    ca_flipped = flipped;  // the only address: the socket keeps retrying it as it is
+                }
+            }
             break;
         case EV_BLE:  // also sent right after "ready": a good moment for the error reports too
             send_ble_status();
@@ -696,6 +943,9 @@ static void net_task(void *arg)
             if (!ws || !ready) {
                 break;
             }
+            if (!is_local(active) && local_allowed() && switch_to_local()) {
+                break;
+            }
             send_log_reports();
             if (ping_sent_us && esp_timer_get_time() - ping_sent_us > PONG_WITHIN_MS * 1000LL) {
                 ESP_LOGW(TAG, "no answer from the server; reconnecting");
@@ -707,11 +957,13 @@ static void net_task(void *arg)
             }
             break;
         case EV_TLS_FAILED:
-            if (vk_cfg.ca) {
-                use_ca = !use_ca;
+            if (vk_cfg.ca && !ca_flipped) {
+                ca_flipped = true;
                 if (wifi_up) {
                     ws_start();
                 }
+            } else {
+                post(EV_FAILED);
             }
             break;
         }

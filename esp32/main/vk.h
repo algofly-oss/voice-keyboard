@@ -16,6 +16,7 @@
 #define VK_SERVER_MAX 160
 #define VK_TOKEN_MAX 160
 #define VK_NAME_MAX 29   // what fits in a BLE scan response
+#define VK_URLS_MAX 400
 
 typedef struct {
     char ssid[VK_SSID_MAX + 1];
@@ -24,6 +25,7 @@ typedef struct {
     char token[VK_TOKEN_MAX + 1];    // install token until paired, then the device credential
     char name[VK_NAME_MAX + 1];      // Bluetooth name, also the name in Settings → Clients
     char *ca;                        // PEM of a private CA (Caddy's local CA), or NULL
+    char urls[VK_URLS_MAX + 1];      // all addresses of the server, comma-separated (from "ready")
 } vk_config_t;
 
 extern vk_config_t vk_cfg;

@@ -6,6 +6,13 @@ client) and types what it receives as a Bluetooth LE keyboard (HID over GATT,
 NimBLE). Users set it up from the web app's `/esp32` page, which flashes it
 over Web Serial with esptool-js and then configures it over the same cable.
 
+With several server addresses (`VK_URLS`, e.g. the LAN address and a
+Cloudflare name) the board keeps the list it gets on connect and the server's
+local CA. It connects to the first local address that accepts a connection,
+else to a public one, re-checks local ones on every heartbeat (~12 s) while on
+a public address, and falls back to a public one after three failed attempts
+(then leaves local ones alone for 10 minutes).
+
 | File | |
 |---|---|
 | `main/main.c` | start-up, status, and the setup commands from the page |

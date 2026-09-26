@@ -178,6 +178,9 @@ static void configure(cJSON *m)
         reply_error("config", "the server address must start with https:// or http://");
         return;
     }
+    if (strcmp(old.server, vk_cfg.server) != 0) {
+        vk_cfg.urls[0] = '\0';  // the addresses of the old server; the new one sends its own
+    }
     cJSON *ca = cJSON_GetObjectItem(m, "ca");
     if (cJSON_IsString(ca) || cJSON_IsNull(ca)) {
         const char *pem = cJSON_IsString(ca) && ca->valuestring[0] ? ca->valuestring : NULL;
