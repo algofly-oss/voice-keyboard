@@ -387,8 +387,12 @@ async def instance():
 
 
 @app.get("/", include_in_schema=False)
-async def web_ui():
-    return HTMLResponse(WEB_SOURCE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
+async def web_ui(request: Request):
+    html = WEB_SOURCE.read_text(encoding="utf-8")
+    if not sessions.user(request.cookies.get("vk_session")):
+        # Signed out: the page starts on the sign-in screen, not the keyboard it would briefly show.
+        html = html.replace('<html lang="en" class="backend-mode">', '<html lang="en" class="backend-mode signed-out">', 1)
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/esp32", include_in_schema=False)
