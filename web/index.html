@@ -940,7 +940,7 @@ function holdToRepeat(btn){
   btn.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.repeat)down(e)});btn.addEventListener('keyup',up);btn.addEventListener('blur',up);
   btn.addEventListener('contextmenu',e=>e.preventDefault());
 }
-// A key pressed once: Enter, the Ctrl+C / Ctrl+A shortcuts.
+// A key pressed once (Enter), with the active modifiers.
 function pressOnce(b,name,withMods=true){b.addEventListener('pointerdown',e=>{e.preventDefault();if(b.disabled)return;
   sendKey(keyQuery((withMods?comboPrefix():'')+name));afterKey()})}
 
@@ -992,8 +992,6 @@ function renderVkb(){
   key('Tab','Tab','tab');
   modKey(tool('Ctrl','Ctrl (tap: next key, hold: while held)'),'ctrl');
   modKey(tool('Alt','Alt (tap: next key, hold: while held)'),'alt');
-  pressOnce(tool('^C','Ctrl+C: interrupt'),'ctrl+c',false);
-  pressOnce(tool('^A','Ctrl+A: select all'),'ctrl+a',false);
   for(const [k,label] of [['left','Left'],['up','Up'],['down','Down'],['right','Right']])key(svg(k),label,k);
   // Landscape only: the microphone as the last key of this row.
   const mic=tool(svg('mic'),'Dictate','mic-key');mic.dataset.alwaysOn='';
