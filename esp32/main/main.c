@@ -247,6 +247,26 @@ static void on_command(char *line)
     cJSON_Delete(m);
 }
 
+// Why the board started, as a warning, so the server's client log shows
+// crashes and power problems (sent once Wi-Fi and the server are up).
+static void log_reset_reason(void)
+{
+    const char *why;
+    switch (esp_reset_reason()) {
+    case ESP_RST_POWERON: why = "power on (plugged in, or the reset button)"; break;
+    case ESP_RST_EXT: why = "the reset pin"; break;
+    case ESP_RST_SW: why = "a restart it was asked for"; break;
+    case ESP_RST_PANIC: why = "a crash (firmware bug)"; break;
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT: why = "a watchdog: the firmware hung"; break;
+    case ESP_RST_BROWNOUT: why = "a power dip (weak USB power or cable)"; break;
+    case ESP_RST_DEEPSLEEP: why = "waking from deep sleep"; break;
+    default: why = "an unknown reason"; break;
+    }
+    ESP_LOGW(TAG, "started after %s", why);
+}
+
 void app_main(void)
 {
     esp_err_t err = nvs_flash_init();
@@ -263,6 +283,7 @@ void app_main(void)
     }
     io_init(on_command);  // first: Wi-Fi and Bluetooth report their status through it
     ESP_LOGI(TAG, "Voice Keyboard %s on %s", esp_app_get_description()->version, CONFIG_IDF_TARGET);
+    log_reset_reason();
     ble_start();
     net_start();
     started = true;

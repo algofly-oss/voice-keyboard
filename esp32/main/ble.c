@@ -104,6 +104,40 @@ static char name[VK_NAME_MAX + 1] = "Voice Keyboard";
 
 static int gap_event(struct ble_gap_event *event, void *arg);
 
+// Why a connection ended, in words: warnings reach the server's client log
+// (GET /api/client-errors), so a keyboard that comes and goes can be explained.
+static const char *disconnect_reason(int reason)
+{
+    switch (reason) {
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_CONN_SPVN_TMO:
+        return "the signal was lost (out of range, or interference)";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_REM_USER_CONN_TERM:
+        return "the device closed the connection";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_RD_CONN_TERM_PWROFF:
+        return "the device turned Bluetooth off";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_RD_CONN_TERM_RESRCS:
+        return "the device ran out of resources";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_CONN_TERM_LOCAL:
+        return "the board closed the connection";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_CONN_ESTABLISHMENT:
+        return "the connection could not be set up";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_LMP_LL_RSP_TMO:
+        return "the device stopped answering";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_INSTANT_PASSED:
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_DIFF_TRANS_COLL:
+        return "a timing error on the link (usually weak signal)";
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_AUTH_FAIL:
+    case BLE_HS_ERR_HCI_BASE + BLE_ERR_PINKEY_MISSING:
+        return "the pairing keys did not match (pair again)";
+    default:
+        return "another reason";
+    }
+}
+
+static int64_t connected_at_us;
+static uint16_t conn_handle;
+static volatile int8_t last_rssi;  // read every second while connected; logged when the link drops
+
 static void advertise(void)
 {
     if (!enabled) {
@@ -163,7 +197,12 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             struct ble_store_key_sec key = {.peer_addr = desc.peer_id_addr};
             struct ble_store_value_sec bond;
             bool bonded = ble_store_read_peer_sec(&key, &bond) == 0;
-            ESP_LOGI(TAG, "connection from %s computer", bonded ? "a paired" : "a new");
+            int8_t rssi = 0;
+            ble_gap_conn_rssi(event->connect.conn_handle, &rssi);
+            ESP_LOGW(TAG, "Bluetooth: connected to %s device (signal %d dBm)", bonded ? "a paired" : "a new", rssi);
+            connected_at_us = esp_timer_get_time();
+            conn_handle = event->connect.conn_handle;
+            last_rssi = rssi;
             connected = true;
             paired_now = false;
             vk_status_t *s = status_begin();
@@ -177,7 +216,14 @@ static int gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_DISCONNECT:
         // Here, not from esp_hidd's events: those come from another task, and a
         // late one from a failed attempt could undo a newer connection.
-        ESP_LOGI(TAG, "disconnected, reason 0x%x", event->disconnect.reason);
+        if (connected) {
+            int secs = (int)((esp_timer_get_time() - connected_at_us) / 1000000);
+            ESP_LOGW(TAG, "Bluetooth: disconnected after %d:%02d:%02d: %s (0x%x); last signal %d dBm",
+                     secs / 3600, secs / 60 % 60, secs % 60, disconnect_reason(event->disconnect.reason),
+                     event->disconnect.reason, last_rssi);
+        } else {
+            ESP_LOGI(TAG, "disconnected, reason 0x%x", event->disconnect.reason);
+        }
         connected = false;
         advertise();
         return 0;
@@ -430,6 +476,10 @@ static void typing_task(void *arg)
                 if (!connected) {
                     advertise();
                 }
+            }
+            int8_t rssi;
+            if (connected && ble_gap_conn_rssi(conn_handle, &rssi) == 0) {
+                last_rssi = rssi;
             }
             // A drag whose release never came (the phone lost its connection).
             if (held_buttons && esp_timer_get_time() - last_pointer_us > DRAG_TIMEOUT_US && connected) {
