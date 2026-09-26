@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>/* Held sideways from the first frame (see applyOrientation), not one frame later. */
 {const coarse=matchMedia('(pointer: coarse)').matches,h=document.documentElement;if(!coarse)h.classList.add('desk');
-if(matchMedia(coarse?'(orientation: landscape)':'(min-width: 760px) and (min-height: 560px)').matches)h.classList.add('landscape')}</script>
+let portrait=false;try{portrait=localStorage.getItem('vk.deskLayout')==='portrait'}catch{}
+const wide=!coarse&&matchMedia('(min-width: 760px) and (min-height: 560px)').matches;if(wide)h.classList.add('desk-wide');
+if(coarse?matchMedia('(orientation: landscape)').matches:wide&&!portrait)h.classList.add('landscape')}</script>
 <meta name="theme-color" content="#1e1f22">
 <meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -468,7 +470,8 @@ html.desk.landscape .vk{font-size:clamp(20px,calc(100dvh * 20 / 820),28px)}
 
 /* A phone held sideways: the top-bar switch (#viewChip) shows the keyboard or the
    touchpad in the space below the status line (a tablet has room for both). */
-#viewChip{display:none;color:var(--muted)}  /* the gray of a chip that is fine, like the server's */
+#viewChip,#layoutChip{display:none;color:var(--muted)}
+html.desk-wide #layoutChip{display:grid}  /* a computer's wide window: the iPad layout or the phone one */  /* the gray of a chip that is fine, like the server's */
 @media (max-height:599px){
   html.landscape .app.touchpad-on #viewChip{display:grid}
   html.landscape .app.touchpad-on.pad-view{grid-template-rows:auto minmax(0,1fr);padding-bottom:6px}  /* down to the edge */
@@ -489,6 +492,8 @@ html.desk.landscape .vk{font-size:clamp(20px,calc(100dvh * 20 / 820),28px)}
       <button class="chip chip-btn" id="desktopChip" type="button" data-state="wait" aria-label="Client status"><i data-i="monitor"></i></button>
       <!-- A phone held sideways has room for the keyboard or the touchpad: this switches. -->
       <button class="chip chip-btn toggle" id="viewChip" type="button" aria-label="Show the touchpad"><i data-i="touchpad"></i></button>
+      <!-- A computer: the iPad-sideways layout or the phone (portrait) one. -->
+      <button class="chip chip-btn toggle" id="layoutChip" type="button" aria-label="Portrait layout"><i data-i="phone"></i></button>
     </div>
     <button class="icon-btn round" id="openSettings" aria-label="Settings" aria-haspopup="dialog"><i data-i="settings"></i></button>
   </header>
@@ -708,6 +713,8 @@ const ICONS={
   more:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   shift:'<path d="M9 20v-6H4l8-10 8 10h-5v6z"/>',
   caps:'<path d="M9 16v-4H4l8-9 8 9h-5v4zM8 21h8"/>',
+  phone:'<rect width="12" height="20" x="6" y="2" rx="2"/><path d="M11 18h2"/>',
+  tablet:'<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M18 11v2"/>',
   monitor:'<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
   cpu:'<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
   up:'<path d="m18 15-6-6-6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',
@@ -1325,8 +1332,16 @@ const touchDevice=matchMedia('(pointer: coarse)').matches;
 const landscapeQuery=matchMedia('(orientation: landscape)');
 // A computer's window: the tablet-sideways layout once it is wide enough (see html.desk).
 const deskQuery=matchMedia('(min-width: 760px) and (min-height: 560px)');
-function applyOrientation(){const want=touchDevice?landscapeQuery.matches:deskQuery.matches,html=document.documentElement;
+// The layout chosen with #layoutChip, remembered on this computer.
+let deskPortrait=false;try{deskPortrait=localStorage.getItem('vk.deskLayout')==='portrait'}catch{}
+function applyOrientation(){const html=document.documentElement,wide=!touchDevice&&deskQuery.matches;
+  const want=touchDevice?landscapeQuery.matches:wide&&!deskPortrait;
+  html.classList.toggle('desk-wide',wide);
+  $('#layoutChip').innerHTML=svg(deskPortrait?'tablet':'phone');
+  $('#layoutChip').setAttribute('aria-label',deskPortrait?'iPad layout (sideways)':'Portrait layout');$('#layoutChip').title=$('#layoutChip').getAttribute('aria-label');
   if(html.classList.contains('landscape')!==want)requestAnimationFrame(()=>html.classList.toggle('landscape',want))}
+$('#layoutChip').addEventListener('click',()=>{deskPortrait=!deskPortrait;
+  try{localStorage.setItem('vk.deskLayout',deskPortrait?'portrait':'wide')}catch{}applyOrientation()});
 landscapeQuery.addEventListener('change',applyOrientation);
 deskQuery.addEventListener('change',applyOrientation);
 applyOrientation();
