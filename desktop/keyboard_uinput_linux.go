@@ -33,6 +33,7 @@ const (
 var uinputKeys = map[string]uint16{
 	"backspace": 14, "enter": 28, "up": 103, "left": 105, "right": 106, "down": 108,
 	"escape": 1, "tab": 15, "space": 57,
+	"f1": 59, "f2": 60, "f3": 61, "f4": 62, "f5": 63, "f6": 64, "f7": 65, "f8": 66, "f9": 67, "f10": 68, "f11": 87, "f12": 88,
 }
 
 // usLayout maps printable ASCII to (Linux key code, needs shift).

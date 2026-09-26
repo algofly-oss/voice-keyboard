@@ -14,6 +14,9 @@ func TestParseCombo(t *testing.T) {
 		"ctrl+C":           nil, // letters are lower-case
 		"ctrl+%":           nil,
 		"ctrl+pageup":      nil,
+		"alt+f4":           {alt: true, key: "f4"},
+		"ctrl+shift+f12":   {ctrl: true, shift: true, key: "f12"},
+		"alt+f13":          nil,
 	} {
 		got, ok := parseCombo(name)
 		if want == nil {

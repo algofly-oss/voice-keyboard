@@ -40,6 +40,8 @@ var virtualKeys = map[string]struct {
 	extended bool
 }{
 	"backspace": {0x08, false}, "enter": {0x0D, false}, "escape": {0x1B, false}, "tab": {0x09, false}, "space": {0x20, false},
+	"f1": {0x70, false}, "f2": {0x71, false}, "f3": {0x72, false}, "f4": {0x73, false}, "f5": {0x74, false}, "f6": {0x75, false},
+	"f7": {0x76, false}, "f8": {0x77, false}, "f9": {0x78, false}, "f10": {0x79, false}, "f11": {0x7A, false}, "f12": {0x7B, false},
 	"left": {0x25, true}, "up": {0x26, true}, "right": {0x27, true}, "down": {0x28, true},
 }
 

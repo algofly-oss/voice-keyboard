@@ -693,7 +693,7 @@ async def remove_device(device_id: int, request: Request):
 
 
 # A named key, or a combination: "ctrl+c", "alt+tab", "ctrl+shift+left".
-NAMED_KEYS = "backspace|enter|up|down|left|right|escape|tab|space"
+NAMED_KEYS = "backspace|enter|up|down|left|right|escape|tab|space|f(?:1[0-2]|[1-9])"
 KEY_NAME = re.compile(rf"(?:{NAMED_KEYS})|(?:(?:ctrl|alt|shift)\+)+(?:[a-z0-9]|{NAMED_KEYS})")
 
 
@@ -721,7 +721,7 @@ async def backend_settings(request: Request):
 
 
 # Preferences of the account, shared by all its browsers: (name, type, default).
-ACCOUNT_PREFS = {"touchpad": (bool, True)}
+ACCOUNT_PREFS = {"touchpad": (bool, True), "functionKeys": (bool, False), "reverseScroll": (bool, False)}
 
 
 def account_prefs(user) -> dict:

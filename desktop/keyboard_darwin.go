@@ -40,6 +40,8 @@ const cgHIDEventTap = 0
 var macKeys = map[string]uint16{
 	"backspace": 0x33, "enter": 0x24, "left": 0x7B, "right": 0x7C, "down": 0x7D, "up": 0x7E,
 	"escape": 0x35, "tab": 0x30, "space": 0x31,
+	"f1": 0x7A, "f2": 0x78, "f3": 0x63, "f4": 0x76, "f5": 0x60, "f6": 0x61,
+	"f7": 0x62, "f8": 0x64, "f9": 0x65, "f10": 0x6D, "f11": 0x67, "f12": 0x6F,
 }
 
 // ANSI key codes of letters and digits, for combinations.

@@ -99,6 +99,9 @@ int keymap_named(const char *name)
     } keys[] = {
         {"backspace", KEY_BACKSPACE}, {"enter", KEY_ENTER}, {"up", KEY_UP}, {"down", KEY_DOWN},
         {"left", KEY_LEFT}, {"right", KEY_RIGHT}, {"space", KEY_SPACE}, {"tab", KEY_TAB}, {"escape", KEY_ESC},
+        // F1–F12 are the HID usages 0x3A–0x45
+        {"f1", 0x3A}, {"f2", 0x3B}, {"f3", 0x3C}, {"f4", 0x3D}, {"f5", 0x3E}, {"f6", 0x3F},
+        {"f7", 0x40}, {"f8", 0x41}, {"f9", 0x42}, {"f10", 0x43}, {"f11", 0x44}, {"f12", 0x45},
     };
     for (size_t i = 0; i < sizeof keys / sizeof keys[0]; i++) {
         if (strcmp(name, keys[i].name) == 0) {

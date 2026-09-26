@@ -128,7 +128,9 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .sheet::backdrop{background:rgba(0,0,0,0)}
 .sheet .scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);opacity:0;transition:opacity .28s}
 .sheet.open .scrim{opacity:1}
-.panel{position:fixed;left:0;right:0;bottom:0;margin:0 auto;max-width:520px;max-height:min(88dvh,720px);display:flex;flex-direction:column;
+/* A fixed height, like a native sheet: switching tabs does not resize it; a
+   shorter tab leaves space at the bottom, a longer one scrolls. */
+.panel{position:fixed;left:0;right:0;bottom:0;margin:0 auto;max-width:520px;height:min(88dvh,720px);display:flex;flex-direction:column;
   background:var(--surface-2);border:1px solid var(--border-soft);border-bottom:0;border-radius:20px 20px 0 0;box-shadow:var(--shadow);transform:translateY(100%);transition:transform .32s var(--ease)}
 .sheet.open .panel{transform:translateY(var(--drag,0px))}
 .sheet.dragging .panel{transition:none}
@@ -141,7 +143,7 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .tabs button svg.i{width:16px;height:16px}
 .tabs button[aria-selected=true]{color:var(--text)}
 .tab-pill{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:var(--radius-sm);background:var(--elevated);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .3s var(--ease)}
-.sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:18px 16px 8px;-webkit-overflow-scrolling:touch}
+.sheet-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 16px 8px;-webkit-overflow-scrolling:touch}
 .pane{display:flex;flex-direction:column;gap:18px;animation:fade .25s var(--ease)}
 .pane[hidden]{display:none}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -170,6 +172,16 @@ summary::-webkit-details-marker{display:none}
 summary svg.i{margin-left:auto;transition:transform .2s var(--ease)}
 details[open] summary svg.i{transform:rotate(180deg)}
 details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px}
+/* Switches share one card: compact rows with dividers, one-line hints. */
+.switch-list{display:flex;flex-direction:column;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft);overflow:hidden}
+.switch-list .switch-row{padding:9px 12px;gap:12px;border:0;border-radius:0;background:none}
+.switch-list .switch-row+.switch-row{border-top:1px solid var(--border-soft)}
+.switch-list .title{font-size:15px}
+.switch-list .hint{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.switch-list .text{min-width:0}
+.switch-list .switch{width:44px;height:26px}
+.switch-list .switch .thumb{width:22px;height:22px}
+.switch-list .switch input:checked~.thumb{transform:translateX(18px)}
 .switch-row{display:flex;align-items:center;gap:14px;padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border-soft);cursor:pointer}
 .switch-row .text{flex:1;display:flex;flex-direction:column;gap:2px}
 .switch-row .title{font-size:16px;font-weight:600;color:var(--text)}
@@ -323,6 +335,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 /* The toolbar lines up with the number row: ten equal keys. */
 .vkb-bar .vk{height:calc(var(--kh) * .8);background:var(--surface-2);font-size:12px;letter-spacing:-.01em}
 .vkb-bar .vk svg.i{width:18px;height:18px}
+.vkb-fn .vk{font-size:11px;letter-spacing:-.02em}  /* twelve keys in the width of ten */
+.vkb-fn{gap:4px}
 .vk.fn.on{background:var(--accent-soft);color:#fff;box-shadow:inset 0 0 0 1.5px var(--accent)}
 .vk.fn.on svg.i{color:#fff}
 .vk.fn.locked{background:var(--accent);color:#fff}
@@ -457,12 +471,20 @@ html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),
     </div>
     <form class="sheet-body" id="form" novalidate autocomplete="off">
       <section class="pane" id="pane-general" role="tabpanel" aria-labelledby="tab-general">
+        <div class="switch-list">
         <label class="switch-row" for="f-live"><span class="text"><span class="title">Type while speaking</span>
-          <span class="hint">Each phrase is typed as soon as it is recognized. Turn off to type everything when you stop.</span></span>
+          <span class="hint">Each phrase types as soon as it is recognized</span></span>
           <span class="switch"><input type="checkbox" id="f-live" name="liveTyping" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
         <label class="switch-row" for="f-touchpad"><span class="text"><span class="title">Touchpad</span>
-          <span class="hint">In portrait, the top of the screen moves the mouse of the active client: one finger moves, a tap clicks, a two-finger tap right-clicks, two fingers scroll.</span></span>
+          <span class="hint">In portrait: move, tap to click, two fingers scroll</span></span>
           <span class="switch"><input type="checkbox" id="f-touchpad" name="touchpad" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
+        <label class="switch-row" for="f-reverse"><span class="text"><span class="title">Reverse scrolling</span>
+          <span class="hint">Two-finger scroll moves the other way</span></span>
+          <span class="switch"><input type="checkbox" id="f-reverse" name="reverseScroll" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
+        <label class="switch-row" for="f-fkeys"><span class="text"><span class="title">Function keys</span>
+          <span class="hint">Adds an F1–F12 row to the keyboard</span></span>
+          <span class="switch"><input type="checkbox" id="f-fkeys" name="functionKeys" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
+        </div>
         <p class="callout translate-note" hidden><i data-i="alert"></i><span>This server translates: speak any language and it types English.</span></p>
         <div class="field"><label for="f-pace">Typing speed</label>
           <select id="f-pace" name="pace">
@@ -851,7 +873,7 @@ function connectEvents(){
   e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.type==='devices')return pollDevice();
     if(m.type==='prefs'){  // changed in another browser (or this one): apply at once
       for(const k of ACCOUNT_PREFS)if(k in m){cfg[k]=m[k];const box=form.elements[k];if(box)box.checked=isOn(m[k])}
-      applyTouchpad();return}
+      applyTouchpad();if('functionKeys' in m)renderVkb();return}
     if(m.owner===clientId)return;
     if(m.type==='state'){if(m.active)enterRemote(m);else if(remote)exitRemote(m.final)}
     else if(m.type==='level'&&remote)remote.level=m.v;
@@ -997,7 +1019,13 @@ function renderVkb(){
   const mic=tool(svg('mic'),'Dictate','mic-key');mic.dataset.alwaysOn='';
   mic.addEventListener('pointerdown',e=>e.preventDefault());mic.addEventListener('click',()=>$('#mic').click());
 
-  kb.replaceChildren(bar,...VKB_LAYERS[vkbLayer].map(row=>{const r=document.createElement('div');r.className='vkb-row';r.append(...row.map(vkbKey));return r}));
+  // F1–F12 (Settings → Function keys): hold to repeat, and with Ctrl/Alt/Shift (Alt+F4).
+  const fkeys=[];
+  if(isOn(cfg.functionKeys)){const row=document.createElement('div');row.className='vkb-row vkb-bar vkb-fn';
+    for(let n=1;n<=12;n++){const b=document.createElement('button');b.type='button';b.className='vk fn';b.tabIndex=-1;b.textContent='F'+n;
+      b.setAttribute('aria-label','F'+n);b.dataset.key='f'+n;holdToRepeat(b);row.append(b)}
+    fkeys.push(row)}
+  kb.replaceChildren(...fkeys,bar,...VKB_LAYERS[vkbLayer].map(row=>{const r=document.createElement('div');r.className='vkb-row';r.append(...row.map(vkbKey));return r}));
   kb.querySelectorAll('button:not([data-always-on])').forEach(b=>b.disabled=keysLocked);
   renderMods();
 }
@@ -1035,7 +1063,8 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
     if(fingers.size===1){  // faster swipes go further, like a laptop touchpad
       const gain=1.3+Math.min(2.2,Math.hypot(dx,dy)/dt*1.4);move.x+=dx*gain;move.y+=dy*gain}
     else{  // two fingers: scroll, the content following the fingers; each finger adds half
-      scroll.x-=dx/SCROLL_PX/fingers.size;scroll.y-=dy/SCROLL_PX/fingers.size}
+      const dir=isOn(cfg.reverseScroll)?-1:1;  // Settings → Reverse scrolling
+      scroll.x-=dir*dx/SCROLL_PX/fingers.size;scroll.y-=dir*dy/SCROLL_PX/fingers.size}
     later()};
   const lifted=(id,t)=>{if(!fingers.delete(id)||fingers.size)return;
     pad.classList.remove('touching');
@@ -1064,9 +1093,16 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
 
 // Phones and tablets lay out by how they are held; computers stay in portrait.
 const touchDevice=matchMedia('(pointer: coarse)').matches;
-function applyOrientation(){document.documentElement.classList.toggle('landscape',touchDevice&&innerWidth>innerHeight)}
-addEventListener('resize',applyOrientation);
+// From the orientation media query (the layout viewport, not the zoom or Safari's
+// sliding toolbars, which made resize-based checks flip during a rotation),
+// applied once per real change.
+const landscapeQuery=matchMedia('(orientation: landscape)');
+function applyOrientation(){const want=touchDevice&&landscapeQuery.matches,html=document.documentElement;
+  if(html.classList.contains('landscape')!==want)requestAnimationFrame(()=>html.classList.toggle('landscape',want))}
+landscapeQuery.addEventListener('change',applyOrientation);
 applyOrientation();
+// An app, not a document: no pinch-zooming the whole page on phones and tablets.
+if(touchDevice)['gesturestart','gesturechange'].forEach(n=>document.addEventListener(n,e=>e.preventDefault(),{passive:false}));
 
 
 // Disconnecting brings back the device's on-screen keyboard; dictating reconnects.
@@ -1124,7 +1160,7 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
 // Settings this browser keeps; everything else comes from the server on each load.
 // Kept per browser. Account preferences (touchpad) are on the server and shared by all browsers.
 const USER_PREFS=['liveTyping','language','afterText','pace'];
-const ACCOUNT_PREFS=['touchpad'];
+const ACCOUNT_PREFS=['touchpad','functionKeys','reverseScroll'];
 function userPrefs(o){return Object.fromEntries(USER_PREFS.filter(k=>k in o).map(k=>[k,o[k]]))}
 async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=userPrefs(JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}'));/* only the user's own preferences; server facts (variant, CA, model) always come from the server */cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}const translating=cfg.variant==='translate';$('#languageField').hidden=translating;$('.translate-note').hidden=!translating}
 
@@ -1135,7 +1171,8 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     localStorage.setItem('voice-keyboard-settings',JSON.stringify(userPrefs(cfg)));
     const shared=Object.fromEntries(ACCOUNT_PREFS.filter(k=>body.has(k)).map(k=>[k,isOn(body.get(k))]));
     if(Object.keys(shared).length)fetch('/api/prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shared)})
-      .then(r=>{if(!r.ok)toast('Could not save the touchpad setting',{error:true})}).catch(()=>{});
+      .then(r=>{if(!r.ok)toast('Could not save the setting',{error:true})}).catch(()=>{});
+    if(body.has('functionKeys'))renderVkb();
     saveBtn.disabled=true;closeSheet();toast('Settings saved');applyTouchpad();
   });
   let install=null,installOs=/Win/.test(navigator.platform||navigator.userAgent)?'windows':'unix';
@@ -1311,7 +1348,7 @@ $('#signOut').addEventListener('click',async()=>{await nativeFetch('/api/logout'
 let started=false;
 async function start(){
   try{await loadSettings()}catch(e){if(e.message!=='401')toast('Cannot reach the server.',{error:true});return}
-  applyTouchpad();
+  applyTouchpad();renderVkb();  // with the account's settings (function keys)
   pollDevice();pollServer();reconnectEvents();
   if(!started){started=true;setInterval(()=>locked||pollDevice(),3000);setInterval(()=>locked||pollServer(),15000)}
 }

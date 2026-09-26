@@ -72,7 +72,7 @@ type keyboard interface {
 	// Type enters text verbatim; "\n" presses Enter.
 	Type(text string) error
 	// Key sends a named key (backspace, enter, up, down, left, right, escape,
-	// tab, space) or a combination such as "ctrl+c", "alt+tab" or
+	// tab, space, f1–f12) or a combination such as "ctrl+c", "alt+tab" or
 	// "ctrl+shift+left": modifiers ctrl, alt and shift, then a named key, a
 	// letter or a digit. state is "press" (down and up), "down"/"hold", or "up";
 	// a combination is always pressed as a whole.
@@ -80,7 +80,8 @@ type keyboard interface {
 	Close()
 }
 
-var keyNames = []string{"backspace", "enter", "up", "down", "left", "right", "escape", "tab", "space"}
+var keyNames = []string{"backspace", "enter", "up", "down", "left", "right", "escape", "tab", "space",
+	"f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"}
 
 // combo is a key pressed with modifiers.
 type combo struct {

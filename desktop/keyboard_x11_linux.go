@@ -41,6 +41,8 @@ var x11Keys = map[string]uint64{
 	"backspace": xkBackSpace, "enter": xkReturn,
 	"left": 0xff51, "up": 0xff52, "right": 0xff53, "down": 0xff54,
 	"escape": 0xff1b, "tab": xkTab, "space": 0x20,
+	"f1": 0xffbe, "f2": 0xffbf, "f3": 0xffc0, "f4": 0xffc1, "f5": 0xffc2, "f6": 0xffc3,
+	"f7": 0xffc4, "f8": 0xffc5, "f9": 0xffc6, "f10": 0xffc7, "f11": 0xffc8, "f12": 0xffc9,
 }
 
 const (
