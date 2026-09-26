@@ -1211,7 +1211,9 @@ async def events(ws: WebSocket):
             if kind in ("stop", "cancel") and room.active:
                 await room.active["ws"].send_json({"type": "remote_" + kind})
             elif kind == "pointer" and (message := pointer_message(data)):
-                await send_pointer(room_for(user), message)
+                # The room itself, not room_for(user): this user row is from when the
+                # page connected, and would put back the client selected then.
+                await send_pointer(room, message)
     except Exception:
         pass
     finally:
