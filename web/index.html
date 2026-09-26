@@ -1275,8 +1275,8 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
 
 // Settings this browser keeps; everything else comes from the server on each load.
 // Kept per browser. Account preferences (touchpad) are on the server and shared by all browsers.
-const USER_PREFS=['liveTyping','language','afterText','pace','bestAddress'];
-const ACCOUNT_PREFS=['touchpad','functionKeys','reverseScroll'];
+const USER_PREFS=['liveTyping','language','afterText','pace'];
+const ACCOUNT_PREFS=['touchpad','functionKeys','reverseScroll','bestAddress'];
 function userPrefs(o){return Object.fromEntries(USER_PREFS.filter(k=>k in o).map(k=>[k,o[k]]))}
 async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=userPrefs(JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}'));/* only the user's own preferences; server facts (variant, CA, model) always come from the server */cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}const translating=cfg.variant==='translate';$('#languageField').hidden=translating;$('.translate-note').hidden=!translating;renderAddresses()}
 
@@ -1319,8 +1319,9 @@ async function goToBestAddress(){
   checkingAddress=true;try{await findBestAddress()}finally{checkingAddress=false}
 }
 async function findBestAddress(){
-  let prefs={};try{prefs=JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}')}catch{}
-  if('bestAddress' in prefs&&!isOn(prefs.bestAddress))return;
+  // An account setting, so turning it off on any address or device counts here too.
+  // Signed out on this address: on (the default), and signing in happens there.
+  try{const r=await nativeFetch('/api/settings',{cache:'no-store'});if(r.ok&&!isOn((await r.json()).bestAddress))return}catch{return}
   const probe=async(u,ms)=>{const r=await nativeFetch(u+'/api/instance',{cache:'no-store',signal:AbortSignal.timeout(ms)});if(!r.ok)throw new Error(r.status);return r.json()};
   let me;try{me=await probe(location.origin,5000)}catch{return}
   const local=(me.urls||[]).filter(u=>{try{return isLocalHost(new URL(u).hostname)}catch{return false}});

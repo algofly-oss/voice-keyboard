@@ -794,13 +794,14 @@ async def backend_settings(request: Request):
     user = require_user(request)
     return {"liveTyping": True, "language": DEFAULT_LANGUAGE, "afterText": "none", "maxSeconds": 600,
             "model": DEFAULT_MODEL, "prompt": "", "variant": "translate" if TRANSLATE else "transcribe",
-            "pace": DEFAULT_PACE, **account_prefs(user), "urls": SERVER_URLS, "bestAddress": True,
+            "pace": DEFAULT_PACE, **account_prefs(user), "urls": SERVER_URLS,
             # With Caddy's local CA, install commands trust it on first contact.
             "localCa": os.environ.get("VK_PROTOCOL", "https") in ("https", "both") and os.environ.get("VK_TLS", "internal") == "internal"}
 
 
 # Preferences of the account, shared by all its browsers: (name, type, default).
-ACCOUNT_PREFS = {"touchpad": (bool, True), "functionKeys": (bool, False), "reverseScroll": (bool, False)}
+ACCOUNT_PREFS = {"touchpad": (bool, True), "functionKeys": (bool, False), "reverseScroll": (bool, False),
+                 "bestAddress": (bool, True)}  # Settings → Fastest address, on every address of the server
 
 
 def account_prefs(user) -> dict:
