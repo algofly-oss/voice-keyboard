@@ -692,9 +692,10 @@ async def remove_device(device_id: int, request: Request):
     return {"ok": True}
 
 
-# A named key, or a combination: "ctrl+c", "alt+tab", "ctrl+shift+left".
+# A named key, or a combination: "ctrl+c", "alt+tab", "ctrl+shift+left", "meta+c"
+# (meta: Command on macOS, the Windows key, Super on Linux).
 NAMED_KEYS = "backspace|enter|up|down|left|right|escape|tab|space|f(?:1[0-2]|[1-9])"
-KEY_NAME = re.compile(rf"(?:{NAMED_KEYS})|(?:(?:ctrl|alt|shift)\+)+(?:[a-z0-9]|{NAMED_KEYS})")
+KEY_NAME = re.compile(rf"(?:{NAMED_KEYS})|(?:(?:ctrl|alt|shift|meta)\+)+(?:[a-z0-9]|{NAMED_KEYS})")
 
 
 @app.post("/api/key")

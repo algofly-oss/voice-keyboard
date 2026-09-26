@@ -10,7 +10,9 @@ func TestParseCombo(t *testing.T) {
 		"shift+alt+ctrl+7": {ctrl: true, alt: true, shift: true, key: "7"},
 		"enter":            nil, // a plain key
 		"ctrl+":            nil,
-		"meta+c":           nil,
+		"meta+c":           {meta: true, key: "c"},
+		"ctrl+meta+space":  {ctrl: true, meta: true, key: "space"},
+		"super+c":          nil,
 		"ctrl+C":           nil, // letters are lower-case
 		"ctrl+%":           nil,
 		"ctrl+pageup":      nil,

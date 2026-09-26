@@ -48,6 +48,7 @@ var x11Keys = map[string]uint64{
 const (
 	xkControlL = 0xffe3
 	xkAltL     = 0xffe9
+	xkSuperL   = 0xffeb
 )
 
 func newX11Keyboard() (*x11Keyboard, error) {
@@ -203,7 +204,7 @@ func (k *x11Keyboard) Key(name, state string) error {
 		for _, m := range []struct {
 			on  bool
 			sym uint64
-		}{{c.ctrl, xkControlL}, {c.alt, xkAltL}, {c.shift, xkShiftL}, {true, sym}} {
+		}{{c.ctrl, xkControlL}, {c.alt, xkAltL}, {c.shift, xkShiftL}, {c.meta, xkSuperL}, {true, sym}} {
 			if !m.on {
 				continue
 			}

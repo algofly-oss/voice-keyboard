@@ -73,7 +73,8 @@ type keyboard interface {
 	Type(text string) error
 	// Key sends a named key (backspace, enter, up, down, left, right, escape,
 	// tab, space, f1–f12) or a combination such as "ctrl+c", "alt+tab" or
-	// "ctrl+shift+left": modifiers ctrl, alt and shift, then a named key, a
+	// "ctrl+shift+left": modifiers ctrl, alt, shift and meta (Command, the
+	// Windows key, Super), then a named key, a
 	// letter or a digit. state is "press" (down and up), "down"/"hold", or "up";
 	// a combination is always pressed as a whole.
 	Key(name, state string) error
@@ -86,6 +87,7 @@ var keyNames = []string{"backspace", "enter", "up", "down", "left", "right", "es
 // combo is a key pressed with modifiers.
 type combo struct {
 	ctrl, alt, shift bool
+	meta             bool   // Command on macOS, the Windows key, Super on Linux
 	key              string // a named key, or one letter or digit
 }
 
@@ -104,6 +106,8 @@ func parseCombo(name string) (combo, bool) {
 			c.alt = true
 		case "shift":
 			c.shift = true
+		case "meta":
+			c.meta = true
 		default:
 			return combo{}, false
 		}

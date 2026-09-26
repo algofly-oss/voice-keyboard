@@ -99,7 +99,7 @@ func (windowsKeyboard) Key(name, state string) error {
 		for _, m := range []struct {
 			on bool
 			vk uint16
-		}{{c.ctrl, 0x11}, {c.alt, 0x12}, {c.shift, 0x10}} {
+		}{{c.ctrl, 0x11}, {c.alt, 0x12}, {c.shift, 0x10}, {c.meta, 0x5B}} { // 0x5B: the left Windows key
 			if m.on {
 				mods = append(mods, m.vk)
 			}

@@ -28,6 +28,7 @@ const (
 	keyLeftShift = 42
 	keyLeftCtrl  = 29
 	keyLeftAlt   = 56
+	keyLeftMeta  = 125
 )
 
 var uinputKeys = map[string]uint16{
@@ -157,7 +158,7 @@ func (k *uinputKeyboard) Key(name, state string) error {
 		for _, m := range []struct {
 			on   bool
 			code uint16
-		}{{c.ctrl, keyLeftCtrl}, {c.alt, keyLeftAlt}, {c.shift, keyLeftShift}} {
+		}{{c.ctrl, keyLeftCtrl}, {c.alt, keyLeftAlt}, {c.shift, keyLeftShift}, {c.meta, keyLeftMeta}} {
 			if m.on {
 				mods = append(mods, m.code)
 			}

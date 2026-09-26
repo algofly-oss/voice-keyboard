@@ -428,8 +428,9 @@ void ble_type(const char *text)
 #define MOD_CTRL 0x01
 #define MOD_SHIFT 0x02
 #define MOD_ALT 0x04
+#define MOD_GUI 0x08  // Command on a Mac, the Windows key, Super
 
-// "ctrl+alt+shift+<key>": modifiers, then a named key, a letter or a digit.
+// "ctrl+alt+shift+meta+<key>": modifiers, then a named key, a letter or a digit.
 // Returns false for anything else (a plain key name).
 static bool parse_combo(const char *name, uint8_t *mod, uint8_t *code)
 {
@@ -444,6 +445,7 @@ static bool parse_combo(const char *name, uint8_t *mod, uint8_t *code)
         if (len == 4 && strncmp(p, "ctrl", 4) == 0) *mod |= MOD_CTRL;
         else if (len == 3 && strncmp(p, "alt", 3) == 0) *mod |= MOD_ALT;
         else if (len == 5 && strncmp(p, "shift", 5) == 0) *mod |= MOD_SHIFT;
+        else if (len == 4 && strncmp(p, "meta", 4) == 0) *mod |= MOD_GUI;
         else return false;
         p = end + 1;
     }

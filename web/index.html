@@ -666,7 +666,7 @@ async function pollDevice(){
     espActive&&!off?status+'. Tap to disconnect the Bluetooth keyboard (the device then shows its on-screen keyboard)':status);
   chip.classList.toggle('toggle',espActive);chip.classList.toggle('kb-off',off);
   chip.querySelector('svg').innerHTML=ICONS[off?'keyboardOff':'keyboard'];
-  renderDevices(deviceStatus.devices);lockKeys(!sel?.online);
+  renderDevices(deviceStatus.devices);lockKeys(!sel?.online);modLabels();
 }
 async function checkServer(url){
   const u=new URL(String(url).replace(/\/+$/,'')+'/health',location.href);
@@ -921,9 +921,9 @@ function typeText(text){queueOut({text})}
 // holding it applies it to every key pressed meanwhile. A tap on an active
 // modifier turns it off. Shift also types capitals; a double tap locks
 // capitals (caps lock only affects letters, not combinations).
-const mods={ctrl:{},alt:{},shift:{}};
+const mods={ctrl:{},alt:{},shift:{},meta:{}};  // meta: Command on a Mac, the Windows key, Super
 const modActive=m=>!!(mods[m].latched||mods[m].held);
-const comboPrefix=()=>['ctrl','alt','shift'].filter(modActive).map(m=>m+'+').join('');
+const comboPrefix=()=>['ctrl','alt','shift','meta'].filter(modActive).map(m=>m+'+').join('');
 const capitals=()=>modActive('shift')||!!mods.shift.lock;
 const keyQuery=name=>'k='+encodeURIComponent(name);
 // After a key: a held modifier counts as used, a latched one is released.
@@ -941,6 +941,15 @@ function modKey(b,m){
   ['pointerup','pointercancel'].forEach(n=>b.addEventListener(n,up));
   b.addEventListener('contextmenu',e=>e.preventDefault());
 }
+// Modifier names of the computer being typed on: a Mac has ⌃ ⌥ ⌘, Windows
+// Ctrl Alt Win, Linux Ctrl Alt Super. An ESP32 cannot know its host: Ctrl Alt ⌘.
+function modLabels(){const p=String(deviceStatus?.selected?.platform||'');
+  const names=/^darwin/.test(p)?{ctrl:['⌃','Control'],alt:['⌥','Option'],meta:['⌘','Command']}
+    :/^windows/.test(p)?{ctrl:['Ctrl','Ctrl'],alt:['Alt','Alt'],meta:['Win','Windows key']}
+    :/^linux/.test(p)?{ctrl:['Ctrl','Ctrl'],alt:['Alt','Alt'],meta:['Super','Super']}
+    :{ctrl:['Ctrl','Ctrl'],alt:['Alt','Alt (Option on a Mac)'],meta:['⌘','Command (Windows key on Windows)']};
+  document.querySelectorAll('#vkb .vkb-bar [data-mod]').forEach(b=>{const n=names[b.dataset.mod];if(!n)return;
+    b.textContent=n[0];b.title=n[1]+' (tap: next key, hold: while held)';b.setAttribute('aria-label',n[1])})}
 // Updates the keys in place (no rebuild, so a held key keeps its pointer).
 function renderMods(){
   document.querySelectorAll('#vkb [data-mod]').forEach(b=>{const m=b.dataset.mod;
@@ -997,7 +1006,7 @@ function vkbKey(token){
 function charKey(b,base,pop){
   let bubble=null;
   const current=()=>vkbLayer==='abc'&&capitals()?base.toUpperCase():base;
-  const emit=()=>{const combo=comboPrefix(),chord=modActive('ctrl')||modActive('alt');
+  const emit=()=>{const combo=comboPrefix(),chord=modActive('ctrl')||modActive('alt')||modActive('meta');
     if(chord&&/^[a-z0-9 ]$/i.test(base))sendKey(keyQuery(combo+(base===' '?'space':base.toLowerCase())));
     else typeText(current());
     afterKey()};
@@ -1017,6 +1026,7 @@ function renderVkb(){
   key('Tab','Tab','tab');
   modKey(tool('Ctrl','Ctrl (tap: next key, hold: while held)'),'ctrl');
   modKey(tool('Alt','Alt (tap: next key, hold: while held)'),'alt');
+  modKey(tool('⌘','Command (tap: next key, hold: while held)'),'meta');
   for(const [k,label] of [['left','Left'],['up','Up'],['down','Down'],['right','Right']])key(svg(k),label,k);
   // Landscape only: the microphone as the last key of this row.
   const mic=tool(svg('mic'),'Dictate','mic-key');mic.dataset.alwaysOn='';
@@ -1031,6 +1041,7 @@ function renderVkb(){
   kb.replaceChildren(...fkeys,bar,...VKB_LAYERS[vkbLayer].map(row=>{const r=document.createElement('div');r.className='vkb-row';r.append(...row.map(vkbKey));return r}));
   kb.querySelectorAll('button:not([data-always-on])').forEach(b=>b.disabled=keysLocked);
   renderMods();
+  modLabels();
 }
 renderVkb();
 $('#micMini').addEventListener('click',()=>$('#mic').click());

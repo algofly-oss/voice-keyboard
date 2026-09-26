@@ -58,6 +58,7 @@ const (
 	cgEventFlagMaskShift     = 0x20000
 	cgEventFlagMaskControl   = 0x40000
 	cgEventFlagMaskAlternate = 0x80000
+	cgEventFlagMaskCommand   = 0x100000
 )
 
 func load() error {
@@ -195,7 +196,7 @@ func (macKeyboard) Key(name, state string) error {
 		for _, m := range []struct {
 			on   bool
 			flag uint64
-		}{{c.ctrl, cgEventFlagMaskControl}, {c.alt, cgEventFlagMaskAlternate}, {c.shift, cgEventFlagMaskShift}} {
+		}{{c.ctrl, cgEventFlagMaskControl}, {c.alt, cgEventFlagMaskAlternate}, {c.shift, cgEventFlagMaskShift}, {c.meta, cgEventFlagMaskCommand}} {
 			if m.on {
 				flags |= m.flag
 			}
