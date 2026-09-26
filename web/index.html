@@ -457,6 +457,17 @@ html.landscape .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex
 html.landscape .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html.landscape .discard{height:28px}
 html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),52px);gap:6px}
+/* A phone held sideways: the top-bar switch (#viewChip) shows the keyboard or the
+   touchpad in the space below the status line (a tablet has room for both). */
+#viewChip{display:none}
+@media (max-height:599px){
+  html.landscape .app.touchpad-on #viewChip{display:grid}
+  html.landscape .app.touchpad-on.pad-view{grid-template-rows:auto minmax(0,1fr)}
+  html.landscape .app.touchpad-on.pad-view .vkb{display:none}
+  html.landscape .app.touchpad-on.pad-view .stage{flex-direction:column;align-items:stretch;gap:6px;padding:0 0 8px;min-height:0}
+  html.landscape .app.touchpad-on.pad-view .touchpad{display:grid}
+  html.landscape .app.touchpad-on.pad-view .stage .below{display:none}  /* the touchpad gets the room; the microphone is on the keyboard */
+}
 </style>
 </head>
 <body>
@@ -467,6 +478,8 @@ html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),
       <span class="chip" id="serverChip" data-state="wait" role="img" aria-label="Server status"><i data-i="server"></i></span>
       <!-- Client status by colour. With an ESP32 active, a tap turns its Bluetooth keyboard off or on. -->
       <button class="chip chip-btn" id="desktopChip" type="button" data-state="wait" aria-label="Client status"><i data-i="keyboard"></i></button>
+      <!-- A phone held sideways has room for the keyboard or the touchpad: this switches. -->
+      <button class="chip chip-btn toggle" id="viewChip" type="button" aria-label="Show the touchpad"><i data-i="touchpad"></i></button>
     </div>
     <button class="icon-btn round" id="openSettings" aria-label="Settings" aria-haspopup="dialog"><i data-i="settings"></i></button>
   </header>
@@ -664,10 +677,12 @@ const ICONS={
   mic:'<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
   square:'<rect x="5" y="5" width="14" height="14" rx="3"/>',
   settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
-  keyboardOff:'<path d="M20 4a2 2 0 0 1 2 2v10.4M7 16h9M9.7 4H20M14 8h.01M18 8h.01M2 2l20 20M20 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2M6 8h.01M8 12h.01"/>',
+  touchpad:'<rect width="18" height="16" x="3" y="4" rx="2"/><path d="M3 15h18M12 15v5"/>',
+  keycaps:'<rect width="5" height="5" x="3" y="6" rx="1"/><rect width="5" height="5" x="9.5" y="6" rx="1"/><rect width="5" height="5" x="16" y="6" rx="1"/><rect width="5" height="5" x="3" y="13" rx="1"/><rect width="11.5" height="5" x="9.5" y="13" rx="1"/>',  // the on-screen keyboard (not the Bluetooth keyboard chip)
   keyboard:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>',
   download:'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
   bluetooth:'<path d="m7 7 10 10-5 5V2l5 5L7 17"/>',
+  bluetoothOff:'<path d="m17 17-5 5V12l-5 5M2 2l20 20M14.5 9.5 17 7l-5-5v4.5"/>',
   server:'<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
   delete:'<path d="M10 5a2 2 0 0 0-1.34.52l-6.33 5.74a1 1 0 0 0 0 1.48l6.33 5.74A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6M18 9l-6 6"/>',
   enter:'<path d="M9 10 4 15l5 5"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
@@ -760,7 +775,8 @@ async function pollDevice(){
   setChip(chip,off?'ok':ready?'ok':sel?'wait':'bad',sel?sel.name:'No client',
     espActive&&!off?status+'. Tap to disconnect the Bluetooth keyboard (the device then shows its on-screen keyboard)':status);
   chip.classList.toggle('toggle',espActive);chip.classList.toggle('kb-off',off);
-  chip.querySelector('svg').innerHTML=ICONS[off?'keyboardOff':'keyboard'];
+  // An ESP32 is a Bluetooth keyboard: its chip shows Bluetooth, which a tap turns off or on.
+  chip.querySelector('svg').innerHTML=ICONS[/^esp32/i.test(sel?.platform||'')?(off?'bluetoothOff':'bluetooth'):'keyboard'];
   renderDevices(deviceStatus.devices);lockKeys(!sel?.online);modLabels();window.renderBoard?.();
 }
 async function checkServer(url){
@@ -1145,6 +1161,12 @@ function renderVkb(){
   modLabels();
 }
 renderVkb();applyTouchpad();  // with the settings sent with the page, before the first frame
+// Phone held sideways: the keyboard or the touchpad (#viewChip), remembered on this device.
+function applyLandscapeView(pad){$('.app').classList.toggle('pad-view',pad);
+  $('#viewChip').innerHTML=svg(pad?'keycaps':'touchpad');$('#viewChip').setAttribute('aria-label',pad?'Show the keyboard':'Show the touchpad')}
+{let pad=false;try{pad=localStorage.getItem('vk.landscapeView')==='pad'}catch{}applyLandscapeView(pad);
+  $('#viewChip').addEventListener('click',()=>{const next=!$('.app').classList.contains('pad-view');applyLandscapeView(next);
+    try{localStorage.setItem('vk.landscapeView',next?'pad':'keyboard')}catch{}})}
 $('#micMini').addEventListener('click',()=>$('#mic').click());
 $('#desktopChip').addEventListener('click',()=>{const sel=deviceStatus.selected;
   if(sel?.online&&/^esp32/i.test(sel.platform||''))setBluetooth(sel.bluetooth==='off')});
