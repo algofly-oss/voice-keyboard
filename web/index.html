@@ -459,7 +459,7 @@ html.landscape .discard{height:28px}
 html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),52px);gap:6px}
 /* A phone held sideways: the top-bar switch (#viewChip) shows the keyboard or the
    touchpad in the space below the status line (a tablet has room for both). */
-#viewChip{display:none}
+#viewChip{display:none;color:var(--muted)}  /* the gray of a chip that is fine, like the server's */
 @media (max-height:599px){
   html.landscape .app.touchpad-on #viewChip{display:grid}
   html.landscape .app.touchpad-on.pad-view{grid-template-rows:auto minmax(0,1fr);padding-bottom:6px}  /* down to the edge */
