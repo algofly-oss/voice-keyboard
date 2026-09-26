@@ -964,14 +964,19 @@ $('#discard').addEventListener('click',()=>state==='remote'?(sendEvent('cancel')
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document.body&&!$('#sheet').open){e.preventDefault();mic.click()}});
 
 // ---------- Keys ----------
-// Keys and on-screen typing go out one request at a time, in order ("down",
-// "hold" and "up" must reach an ESP32 in order too). Letters typed while a
-// request is in flight are merged into the next one.
+// Keys and on-screen typing go out in order ("down", "hold" and "up" must
+// reach an ESP32 in order too): over the events socket when it is open,
+// otherwise one HTTP request at a time, letters typed meanwhile merged.
 const outbox=[];let sending=false;
 function queueOut(op){keyboardNeeded();const last=outbox[outbox.length-1];
   if(op.text!==undefined&&last&&last.text!==undefined&&!last.sent)last.text+=op.text;else outbox.push(op);pumpOut()}
 async function pumpOut(){if(sending)return;sending=true;
   while(outbox.length){const op=outbox[0];op.sent=true;
+    // The open events socket: sent at once, in order, no request to wait for.
+    if(events?.readyState===1){
+      if(op.text!==undefined)events.send(JSON.stringify({type:'text',text:op.text}));
+      else{const q=new URLSearchParams(op.key);events.send(JSON.stringify({type:'key',key:q.get('k'),state:q.get('s')||'press'}))}
+      outbox.shift();continue}
     try{const r=op.text!==undefined
         ?await fetch('/api/type',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:op.text})})
         :await fetch('/api/key?'+op.key,{method:'POST'});

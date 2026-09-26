@@ -734,15 +734,21 @@ NAMED_KEYS = "backspace|enter|up|down|left|right|escape|tab|space|f(?:1[0-2]|[1-
 KEY_NAME = re.compile(rf"(?:{NAMED_KEYS})|(?:(?:ctrl|alt|shift|meta)\+)+(?:[a-z0-9]|{NAMED_KEYS})")
 
 
+def key_message(key: str, state: str) -> dict | None:
+    """The message for a client, or None for a key or state it does not know."""
+    if not KEY_NAME.fullmatch(key) or state not in {"down", "hold", "up", "press"}:
+        return None
+    # Space goes out as text so already-installed desktop clients can type it.
+    return {"type": "segment", "text": " "} if key == "space" else {"type": "key", "key": key, "state": state}
+
+
 @app.post("/api/key")
 async def backend_key(request: Request):
+    """Keys from the web app; it uses the /v1/events socket instead while that is open."""
     user = require_user(request)
-    key = request.query_params.get("k", "")
-    state = request.query_params.get("s", "press")
-    if not KEY_NAME.fullmatch(key) or state not in {"down", "hold", "up", "press"}:
+    message = key_message(request.query_params.get("k", ""), request.query_params.get("s", "press"))
+    if not message:
         raise HTTPException(400, "Unsupported key")
-    # Space goes out as text so already-installed desktop clients can type it.
-    message = {"type": "segment", "text": " "} if key == "space" else {"type": "key", "key": key, "state": state}
     await send_keyboard(room_for(user), message)
     return {"ok": True}
 
@@ -1192,6 +1198,8 @@ async def events(ws: WebSocket):
     server -> {"type":"prefs","touchpad":true}  an account preference changed (POST /api/prefs)
     server -> {"type":"device-log","device":2,"level":"info","line":"…"}  a line from an ESP32's live log
     client -> {"type":"stop"} or {"type":"cancel"}  to end another device's dictation
+    client -> {"type":"key","key":"enter","state":"press"} / {"type":"text","text":"…"}
+              from the on-screen keyboard, for the active client (like POST /api/key and /api/type)
     client -> {"type":"pointer","action":"move"|"scroll","dx":3,"dy":-1} or
               {"type":"pointer","action":"click"|"press"|"release","button":"left"|"right"|"middle"}
               (press/release: a held button, for dragging)
@@ -1210,6 +1218,12 @@ async def events(ws: WebSocket):
             kind = data.get("type")
             if kind in ("stop", "cancel") and room.active:
                 await room.active["ws"].send_json({"type": "remote_" + kind})
+            # Keys and text from the on-screen keyboard: on this socket they go out at
+            # once and in order, without an HTTP request and its wait for each one.
+            elif kind == "key" and (message := key_message(str(data.get("key") or ""), str(data.get("state") or "press"))):
+                await send_keyboard(room, message)
+            elif kind == "text" and (text := str(data.get("text") or "")[:2000]):
+                await send_keyboard(room, {"type": "segment", "text": text})
             elif kind == "pointer" and (message := pointer_message(data)):
                 # The room itself, not room_for(user): this user row is from when the
                 # page connected, and would put back the client selected then.
