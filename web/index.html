@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>/* Held sideways from the first frame (see applyOrientation), not one frame later. */
+if(matchMedia('(pointer: coarse)').matches&&matchMedia('(orientation: landscape)').matches)document.documentElement.classList.add('landscape')</script>
 <meta name="theme-color" content="#1e1f22">
 <meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -33,6 +35,10 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
 [tabindex="-1"]:focus{outline:none}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+/* Hidden until the script has built it (keyboard, layout), so nothing moves after the
+   first frame; shown after 1 s regardless, should the script ever fail. */
+html:not(.ready) .app{visibility:hidden;animation:vk-reveal 0s 1s forwards}
+@keyframes vk-reveal{to{visibility:visible}}
 .app{height:100vh;height:100dvh;max-width:480px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;
   padding:calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px)}
 
@@ -1567,6 +1573,7 @@ async function resumeAfterReload(){
     ['pointerdown','keydown'].forEach(t=>addEventListener(t,go,{once:true,capture:true}));
   }
 }
+document.documentElement.classList.add('ready');  // built: show it (see html:not(.ready))
 </script>
 </body>
 </html>
