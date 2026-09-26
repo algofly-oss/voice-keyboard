@@ -52,6 +52,12 @@ static int log_vprintf(const char *format, va_list args)
     int n = vsnprintf(buf, sizeof buf, format, args);
     if (n > 0) {
         write_line(NULL, buf, n < (int)sizeof buf ? (size_t)n : sizeof buf - 1);
+        // Errors and warnings also go to the server (after a colour code, if any).
+        const char *p = buf[0] == '\x1b' ? strchr(buf, 'm') : NULL;
+        p = p ? p + 1 : buf;
+        if ((p[0] == 'E' || p[0] == 'W') && p[1] == ' ' && p[2] == '(') {
+            net_report_log(p);
+        }
     }
     return n;
 }

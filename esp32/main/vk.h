@@ -64,6 +64,7 @@ void net_apply(bool wifi_changed, bool server_changed);  // after the settings c
 cJSON *net_scan(void);                                   // array of {ssid, rssi, secure}
 const char *vk_machine_id(void);
 void net_ble_changed(void);  // tells the server whether a computer is connected over Bluetooth
+void net_report_log(const char *line);  // an error or warning line, sent to the server when connected
 
 // Bluetooth LE keyboard.
 void ble_start(void);
@@ -71,6 +72,8 @@ void ble_set_name(const char *name);
 void ble_forget(void);
 void ble_type(const char *text);             // queued; typed in order
 void ble_key(const char *key, const char *state);
+// Touchpad: action "move" or "scroll" (dx, dy), or "click" (button left/right/middle).
+void ble_pointer(const char *action, int dx, int dy, const char *button);
 
 // US layout: ASCII and the common typographic characters map to a key and
 // modifiers; returns the number of keystrokes (0 when not typeable).

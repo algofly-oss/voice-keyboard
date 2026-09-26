@@ -25,6 +25,7 @@ static const char *TAG = "ble";
 #define RETRY_MS 2            // when the stack's buffers are full
 #define RETRY_LIMIT 1000      // ~2 s, then the report is dropped
 #define REPORT_ID 1
+#define MOUSE_REPORT_ID 2
 #define APPEARANCE_KEYBOARD 0x03C1
 
 void ble_store_config_init(void);
@@ -41,6 +42,17 @@ static const uint8_t report_map[] = {
     0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x73,
     0x05, 0x07, 0x19, 0x00, 0x29, 0x73, 0x81, 0x00,  // 6 key codes, Input (Array)
     0xC0,
+    // Mouse, for the web app's touchpad: 3 buttons, X, Y, wheel, horizontal pan.
+    0x05, 0x01, 0x09, 0x02, 0xA1, 0x01,  // Generic Desktop, Mouse, Collection (Application)
+    0x85, MOUSE_REPORT_ID,               //   Report ID
+    0x09, 0x01, 0xA1, 0x00,              //   Pointer, Collection (Physical)
+    0x05, 0x09, 0x19, 0x01, 0x29, 0x03, 0x15, 0x00, 0x25, 0x01, 0x95, 0x03, 0x75, 0x01, 0x81, 0x02,  // buttons 1–3
+    0x95, 0x01, 0x75, 0x05, 0x81, 0x03,  //     padding
+    0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,  // X, Y, Wheel
+    0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,  // -127..127, Input (Relative)
+    0x05, 0x0C, 0x0A, 0x38, 0x02,        //     Consumer: AC Pan (horizontal scroll)
+    0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x01, 0x81, 0x06,
+    0xC0, 0xC0,
 };
 
 static esp_hid_raw_report_map_t report_maps[] = {{.data = report_map, .len = sizeof report_map}};
@@ -195,9 +207,12 @@ static void host_task(void *param)
 // ---- Typing ----
 
 typedef struct {
-    char *text;   // text to type, or NULL for a key
+    char *text;   // text to type, or NULL for a key or a pointer action
     int8_t key;   // HID usage of a named key
-    char state;   // 'p'ress, 'd'own, 'u'p
+    uint8_t mod;  // modifiers pressed with it (ctrl+c)
+    char state;   // 'p'ress, 'd'own, 'u'p; for the pointer: 'm'ove, 'c'lick, 's'croll
+    int16_t dx, dy;   // pointer motion or scroll steps
+    uint8_t buttons;  // pointer click: 1 left, 2 right, 4 middle
 } job_t;
 
 static QueueHandle_t jobs;
@@ -206,19 +221,61 @@ static uint8_t held;  // a key kept down by "down"/"hold" until "up"
 // As fast as the link takes them: no fixed delay, only waiting while the
 // stack's buffers are full. Notifications arrive in order, and every report
 // reaches the host.
-static void send_report(uint8_t mod, uint8_t code)
+static void send_input(uint8_t id, uint8_t *report, size_t len)
 {
-    uint8_t report[8] = {mod, 0, code, 0, 0, 0, 0, 0};
     for (int attempt = 0; attempt < RETRY_LIMIT; attempt++) {
         if (!connected) {
             return;
         }
-        if (esp_hidd_dev_input_set(hid, 0, REPORT_ID, report, sizeof report) == ESP_OK) {
+        if (esp_hidd_dev_input_set(hid, 0, id, report, len) == ESP_OK) {
             return;
         }
         vTaskDelay(pdMS_TO_TICKS(RETRY_MS));
     }
     ESP_LOGW(TAG, "report dropped: the link is stalled");
+}
+
+static void send_report(uint8_t mod, uint8_t code)
+{
+    uint8_t report[8] = {mod, 0, code, 0, 0, 0, 0, 0};
+    send_input(REPORT_ID, report, sizeof report);
+}
+
+static void send_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel, int8_t pan)
+{
+    uint8_t report[5] = {buttons, (uint8_t)x, (uint8_t)y, (uint8_t)wheel, (uint8_t)pan};
+    send_input(MOUSE_REPORT_ID, report, sizeof report);
+}
+
+static int8_t step(int *rest)
+{
+    int s = *rest > 127 ? 127 : *rest < -127 ? -127 : *rest;
+    *rest -= s;
+    return (int8_t)s;
+}
+
+static void pointer_job(const job_t *job)
+{
+    int dx = job->dx, dy = job->dy;
+    switch (job->state) {
+    case 'm':  // a report carries at most ±127 per axis
+        while (dx || dy) {
+            int8_t x = step(&dx), y = step(&dy);
+            send_mouse(0, x, y, 0, 0);
+        }
+        break;
+    case 'c':
+        send_mouse(job->buttons, 0, 0, 0, 0);
+        send_mouse(0, 0, 0, 0, 0);
+        break;
+    case 's':  // the wheel counts up as positive; dy > 0 scrolls down
+        dy = -dy;
+        while (dx || dy) {
+            int8_t wheel = step(&dy), pan = step(&dx);
+            send_mouse(0, 0, 0, wheel, pan);
+        }
+        break;
+    }
 }
 
 static void stroke(uint8_t mod, uint8_t code)
@@ -298,15 +355,20 @@ static void typing_task(void *arg)
     for (;;) {
         xQueueReceive(jobs, &job, portMAX_DELAY);
         if (!connected) {
-            ESP_LOGW(TAG, "not typed: no computer is connected over Bluetooth");
+            bool pointer = job.state == 'm' || job.state == 'c' || job.state == 's';
+            if (!pointer) {  // pointer motion would flood the log
+                ESP_LOGW(TAG, "not typed: no computer is connected over Bluetooth");
+            }
             free(job.text);
             continue;
         }
-        if (job.text) {
+        if (job.state == 'm' || job.state == 'c' || job.state == 's') {
+            pointer_job(&job);
+        } else if (job.text) {
             type_text(job.text);
             free(job.text);
         } else if (job.state == 'p') {
-            stroke(0, job.key);
+            stroke(job.mod, job.key);
         } else if (job.state == 'd') {
             held = job.key;
             send_report(0, held);
@@ -326,8 +388,54 @@ void ble_type(const char *text)
     }
 }
 
+// HID modifier bits (left-hand keys).
+#define MOD_CTRL 0x01
+#define MOD_SHIFT 0x02
+#define MOD_ALT 0x04
+
+// "ctrl+alt+shift+<key>": modifiers, then a named key, a letter or a digit.
+// Returns false for anything else (a plain key name).
+static bool parse_combo(const char *name, uint8_t *mod, uint8_t *code)
+{
+    const char *key = strrchr(name, '+');
+    if (!key || !key[1]) {
+        return false;
+    }
+    *mod = 0;
+    for (const char *p = name; p < key;) {
+        const char *end = strchr(p, '+');
+        size_t len = end - p;
+        if (len == 4 && strncmp(p, "ctrl", 4) == 0) *mod |= MOD_CTRL;
+        else if (len == 3 && strncmp(p, "alt", 3) == 0) *mod |= MOD_ALT;
+        else if (len == 5 && strncmp(p, "shift", 5) == 0) *mod |= MOD_SHIFT;
+        else return false;
+        p = end + 1;
+    }
+    key++;
+    int named = keymap_named(key);
+    if (named >= 0) {
+        *code = named;
+        return true;
+    }
+    vk_stroke_t stroke[3];
+    if (strlen(key) == 1 && ((key[0] >= 'a' && key[0] <= 'z') || (key[0] >= '0' && key[0] <= '9')) &&
+        keymap_lookup((uint8_t)key[0], stroke) == 1) {
+        *code = stroke[0].code;
+        return true;
+    }
+    return false;
+}
+
 void ble_key(const char *key, const char *state)
 {
+    uint8_t mod, combo_code;
+    if (parse_combo(key, &mod, &combo_code)) {  // always a press, as one chord
+        if (strcmp(state, "up") != 0) {
+            job_t job = {.key = combo_code, .mod = mod, .state = 'p'};
+            xQueueSend(jobs, &job, 0);
+        }
+        return;
+    }
     int code = keymap_named(key);
     if (code < 0) {
         return;
@@ -335,6 +443,22 @@ void ble_key(const char *key, const char *state)
     job_t job = {.key = code, .state = strcmp(state, "up") == 0 ? 'u'
                                     : (strcmp(state, "down") == 0 || strcmp(state, "hold") == 0) ? 'd' : 'p'};
     xQueueSend(jobs, &job, 0);
+}
+
+void ble_pointer(const char *action, int dx, int dy, const char *button)
+{
+    job_t job = {.dx = dx, .dy = dy};
+    if (strcmp(action, "move") == 0) {
+        job.state = 'm';
+    } else if (strcmp(action, "scroll") == 0) {
+        job.state = 's';
+    } else if (strcmp(action, "click") == 0 && button) {
+        job.state = 'c';
+        job.buttons = strcmp(button, "right") == 0 ? 2 : strcmp(button, "middle") == 0 ? 4 : 1;
+    } else {
+        return;
+    }
+    xQueueSend(jobs, &job, 0);  // a full queue drops pointer motion: it is superseded anyway
 }
 
 // ---- Setup ----

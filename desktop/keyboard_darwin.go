@@ -38,7 +38,24 @@ const cgHIDEventTap = 0
 
 var macKeys = map[string]uint16{
 	"backspace": 0x33, "enter": 0x24, "left": 0x7B, "right": 0x7C, "down": 0x7D, "up": 0x7E,
+	"escape": 0x35, "tab": 0x30, "space": 0x31,
 }
+
+// ANSI key codes of letters and digits, for combinations.
+var macChars = map[byte]uint16{
+	'a': 0x00, 's': 0x01, 'd': 0x02, 'f': 0x03, 'h': 0x04, 'g': 0x05, 'z': 0x06, 'x': 0x07, 'c': 0x08, 'v': 0x09,
+	'b': 0x0B, 'q': 0x0C, 'w': 0x0D, 'e': 0x0E, 'r': 0x0F, 'y': 0x10, 't': 0x11, 'o': 0x1F, 'u': 0x20, 'i': 0x22,
+	'p': 0x23, 'l': 0x25, 'j': 0x26, 'k': 0x28, 'n': 0x2D, 'm': 0x2E,
+	'1': 0x12, '2': 0x13, '3': 0x14, '4': 0x15, '5': 0x17, '6': 0x16, '7': 0x1A, '8': 0x1C, '9': 0x19, '0': 0x1D,
+}
+
+// Modifier flags of a combination. Control is Control, not Command: ctrl+c
+// interrupts in Terminal (Command+C would copy).
+const (
+	cgEventFlagMaskShift     = 0x20000
+	cgEventFlagMaskControl   = 0x40000
+	cgEventFlagMaskAlternate = 0x80000
+)
 
 func load() error {
 	loadOnce.Do(func() {
@@ -146,6 +163,34 @@ func (macKeyboard) Type(text string) error {
 }
 
 func (macKeyboard) Key(name, state string) error {
+	if c, ok := parseCombo(name); ok {
+		if state == "up" {
+			return nil
+		}
+		code, ok := macKeys[c.key]
+		if !ok {
+			code = macChars[c.key[0]]
+		}
+		var flags uint64
+		for _, m := range []struct {
+			on   bool
+			flag uint64
+		}{{c.ctrl, cgEventFlagMaskControl}, {c.alt, cgEventFlagMaskAlternate}, {c.shift, cgEventFlagMaskShift}} {
+			if m.on {
+				flags |= m.flag
+			}
+		}
+		for _, down := range []bool{true, false} {
+			event := cgEventCreateKeyboardEvent(0, code, down)
+			if event == 0 {
+				return errors.New("CGEventCreateKeyboardEvent failed")
+			}
+			cgEventSetFlags(event, flags)
+			cgEventPost(cgHIDEventTap, event)
+			cfRelease(event)
+		}
+		return nil
+	}
 	code, ok := macKeys[name]
 	if !ok {
 		return fmt.Errorf("unsupported key %q", name)

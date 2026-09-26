@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
@@ -38,7 +39,7 @@ var virtualKeys = map[string]struct {
 	vk       uint16
 	extended bool
 }{
-	"backspace": {0x08, false}, "enter": {0x0D, false},
+	"backspace": {0x08, false}, "enter": {0x0D, false}, "escape": {0x1B, false}, "tab": {0x09, false}, "space": {0x20, false},
 	"left": {0x25, true}, "up": {0x26, true}, "right": {0x27, true}, "down": {0x28, true},
 }
 
@@ -84,6 +85,37 @@ func (windowsKeyboard) Type(text string) error {
 }
 
 func (windowsKeyboard) Key(name, state string) error {
+	if c, ok := parseCombo(name); ok {
+		if state == "up" {
+			return nil
+		}
+		k, ok := virtualKeys[c.key]
+		if !ok { // letters and digits: their virtual key is the capital / the digit
+			k.vk = uint16(strings.ToUpper(c.key)[0])
+		}
+		var mods []uint16
+		for _, m := range []struct {
+			on bool
+			vk uint16
+		}{{c.ctrl, 0x11}, {c.alt, 0x12}, {c.shift, 0x10}} {
+			if m.on {
+				mods = append(mods, m.vk)
+			}
+		}
+		var events []input
+		for _, vk := range mods {
+			events = append(events, input{typ: inputKeyboard, vk: vk})
+		}
+		flags := uint32(0)
+		if k.extended {
+			flags = keyEventExtended
+		}
+		events = append(events, input{typ: inputKeyboard, vk: k.vk, flags: flags}, input{typ: inputKeyboard, vk: k.vk, flags: flags | keyEventKeyUp})
+		for i := len(mods) - 1; i >= 0; i-- {
+			events = append(events, input{typ: inputKeyboard, vk: mods[i], flags: keyEventKeyUp})
+		}
+		return send(events)
+	}
 	k, ok := virtualKeys[name]
 	if !ok {
 		return fmt.Errorf("unsupported key %q", name)

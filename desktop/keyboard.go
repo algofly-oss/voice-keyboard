@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -69,13 +71,49 @@ func newConfiguredKeyboard(cfg config) (keyboard, error) {
 type keyboard interface {
 	// Type enters text verbatim; "\n" presses Enter.
 	Type(text string) error
-	// Key sends a named key: backspace, enter, up, down, left, right.
-	// state is "press" (down and up), "down"/"hold", or "up".
+	// Key sends a named key (backspace, enter, up, down, left, right, escape,
+	// tab, space) or a combination such as "ctrl+c", "alt+tab" or
+	// "ctrl+shift+left": modifiers ctrl, alt and shift, then a named key, a
+	// letter or a digit. state is "press" (down and up), "down"/"hold", or "up";
+	// a combination is always pressed as a whole.
 	Key(name, state string) error
 	Close()
 }
 
-var keyNames = []string{"backspace", "enter", "up", "down", "left", "right"}
+var keyNames = []string{"backspace", "enter", "up", "down", "left", "right", "escape", "tab", "space"}
+
+// combo is a key pressed with modifiers.
+type combo struct {
+	ctrl, alt, shift bool
+	key              string // a named key, or one letter or digit
+}
+
+// parseCombo reads "ctrl+alt+shift+<key>"; false for a plain key name.
+func parseCombo(name string) (combo, bool) {
+	parts := strings.Split(name, "+")
+	if len(parts) < 2 {
+		return combo{}, false
+	}
+	var c combo
+	for _, m := range parts[:len(parts)-1] {
+		switch m {
+		case "ctrl":
+			c.ctrl = true
+		case "alt":
+			c.alt = true
+		case "shift":
+			c.shift = true
+		default:
+			return combo{}, false
+		}
+	}
+	c.key = parts[len(parts)-1]
+	if len(c.key) == 1 {
+		k := c.key[0]
+		return c, k >= 'a' && k <= 'z' || k >= '0' && k <= '9'
+	}
+	return c, slices.Contains(keyNames, c.key)
+}
 
 // pressKey applies a press/down/up state using a platform's down/up primitive.
 func pressKey(send func(down bool) error, state string) error {

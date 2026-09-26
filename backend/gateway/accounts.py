@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS devices (
     last_seen       INTEGER,
     UNIQUE (user_id, machine_id)
 );
+-- Errors reported by the clients themselves (typing, keys, touchpad), for troubleshooting.
+CREATE TABLE IF NOT EXISTS client_errors (
+    id        INTEGER PRIMARY KEY,
+    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    at        INTEGER NOT NULL,
+    message   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS client_errors_device ON client_errors (device_id, id);
 """
 
 USERNAME_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789._-@")
@@ -178,6 +186,29 @@ class Store:
         if allowed:
             sets = ", ".join(f"{k}=?" for k in allowed)
             self._q(f"UPDATE devices SET {sets} WHERE id=?", (*allowed.values(), device_id))
+
+    CLIENT_ERRORS_KEPT = 200  # per client, newest first
+
+    def add_client_error(self, device_id: int, message: str):
+        with self._lock:
+            self._db.execute("INSERT INTO client_errors (device_id, at, message) VALUES (?,?,?)",
+                             (device_id, int(time.time()), message))
+            self._db.execute("""DELETE FROM client_errors WHERE device_id=? AND id NOT IN
+                                (SELECT id FROM client_errors WHERE device_id=? ORDER BY id DESC LIMIT ?)""",
+                             (device_id, device_id, self.CLIENT_ERRORS_KEPT))
+
+    def client_errors(self, user_id: int | None, device_id: int | None = None, limit: int = 100) -> list[sqlite3.Row]:
+        """Newest first; user_id None means every account (for an admin)."""
+        where, args = [], []
+        if user_id is not None:
+            where.append("d.user_id=?"); args.append(user_id)
+        if device_id is not None:
+            where.append("d.id=?"); args.append(device_id)
+        sql = """SELECT e.at, e.message, d.id AS device_id, d.name, d.platform, d.version, u.username
+                 FROM client_errors e JOIN devices d ON d.id=e.device_id JOIN users u ON u.id=d.user_id"""
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        return self._q(sql + " ORDER BY e.id DESC LIMIT ?", (*args, limit))
 
     def delete_device(self, user_id: int, device_id: int) -> bool:
         with self._lock:

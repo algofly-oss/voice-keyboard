@@ -489,6 +489,37 @@ async def backend_status(request: Request):
             "selected": next((d for d in devices if d["selected"]), None)}
 
 
+@app.post("/api/type")
+async def backend_type(request: Request):
+    """Text from the on-screen keyboard, typed by the active client like dictation."""
+    user = require_user(request)
+    text = str((await request.json()).get("text") or "")[:2000]
+    if text:
+        await send_keyboard(room_for(user), {"type": "segment", "text": text})
+    return {"ok": True}
+
+
+CLIENT_ERRORS_PER_MINUTE = 30  # per connection, so a broken client cannot flood the database
+
+
+@app.get("/api/client-errors")
+async def client_errors(request: Request):
+    """Errors the account's clients reported, newest first. ?device=ID for one;
+    an admin can add ?all=1 for every account."""
+    user = require_user(request)
+    params = request.query_params
+    try:
+        device = int(params["device"]) if params.get("device") else None
+        limit = max(1, min(500, int(params.get("limit") or 100)))
+    except ValueError:
+        raise HTTPException(400, "device and limit must be numbers")
+    everyone = params.get("all") == "1" and bool(user["is_admin"])
+    rows = store.client_errors(None if everyone else user["id"], device, limit)
+    return {"errors": [{"at": r["at"], "message": r["message"], "device": r["device_id"], "client": r["name"],
+                        "platform": r["platform"], "version": r["version"], **({"user": r["username"]} if everyone else {})}
+                       for r in rows]}
+
+
 @app.post("/api/devices/{device_id}/select")
 async def select_device(device_id: int, request: Request):
     user = require_user(request)
@@ -534,12 +565,17 @@ async def remove_device(device_id: int, request: Request):
     return {"ok": True}
 
 
+# A named key, or a combination: "ctrl+c", "alt+tab", "ctrl+shift+left".
+NAMED_KEYS = "backspace|enter|up|down|left|right|escape|tab|space"
+KEY_NAME = re.compile(rf"(?:{NAMED_KEYS})|(?:(?:ctrl|alt|shift)\+)+(?:[a-z0-9]|{NAMED_KEYS})")
+
+
 @app.post("/api/key")
 async def backend_key(request: Request):
     user = require_user(request)
     key = request.query_params.get("k", "")
     state = request.query_params.get("s", "press")
-    if key not in {"backspace", "up", "down", "left", "right", "enter", "space"} or state not in {"down", "hold", "up", "press"}:
+    if not KEY_NAME.fullmatch(key) or state not in {"down", "hold", "up", "press"}:
         raise HTTPException(400, "Unsupported key")
     # Space goes out as text so already-installed desktop clients can type it.
     message = {"type": "segment", "text": " "} if key == "space" else {"type": "key", "key": key, "state": state}
@@ -728,6 +764,7 @@ async def keyboard(ws: WebSocket):
     server -> {"type":"selected","selected":false}      when the user picks another computer
     server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
     client -> {"type":"status","bluetooth":"connected"|"waiting"}   ESP32 boards, on every change
+    client -> {"type":"log","level":"error","message":"…"}   an error on the client, stored for troubleshooting
     The token is the account's install token (first pairing), the device's
     credential, or a credential issued before accounts existed.
     """
@@ -775,6 +812,7 @@ async def keyboard(ws: WebSocket):
         await announce_selection(room, skip=ws)
         if room.selected == device["id"]:
             await flush_pending(room, ws)
+        error_times: list[float] = []
         while True:
             message = await ws.receive()
             if message.get("type") == "websocket.disconnect":
@@ -783,6 +821,15 @@ async def keyboard(ws: WebSocket):
                 data = json.loads(message["text"])
                 if data.get("type") == "ping":
                     await ws.send_json({"type": "pong"})
+                elif data.get("type") == "log" and data.get("level") == "error":
+                    # Error reports from the client, kept per client (GET /api/client-errors).
+                    now = time.monotonic()
+                    error_times[:] = [t for t in error_times if now - t < 60][-CLIENT_ERRORS_PER_MINUTE:]
+                    if len(error_times) < CLIENT_ERRORS_PER_MINUTE:
+                        error_times.append(now)
+                        text = str(data.get("message") or "")[:1000]
+                        store.add_client_error(device["id"], text)
+                        log.warning("Client %r (%s) reported: %s", device["name"], device["platform"], text)
                 elif data.get("type") == "status" and data.get("bluetooth") in ("connected", "waiting"):
                     room.bluetooth[device["id"]] = data["bluetooth"]
                     room.broadcast({"type": "devices"})
@@ -894,6 +941,31 @@ async def send_keyboard(room: Room, message: dict):
         del room.pending[:-500]
 
 
+def pointer_message(data: dict) -> dict | None:
+    """A checked copy of a touchpad message for the clients, or None."""
+    action = data.get("action")
+    if action in ("move", "scroll"):
+        try:
+            limit = 4000 if action == "move" else 100
+            dx, dy = (max(-limit, min(limit, int(data.get(k) or 0))) for k in ("dx", "dy"))
+        except (TypeError, ValueError):
+            return None
+        return {"type": "pointer", "action": action, "dx": dx, "dy": dy} if dx or dy else None
+    if action == "click" and data.get("button") in ("left", "right", "middle"):
+        return {"type": "pointer", "action": "click", "button": data["button"]}
+    return None
+
+
+async def send_pointer(room: Room, message: dict):
+    """Like send_keyboard, but never queued: stale pointer moves must not replay later."""
+    client = room.devices.get(room.selected)
+    if client is not None:
+        try:
+            await client.send_json(message)
+        except Exception:
+            pass
+
+
 async def flush_pending(room: Room, ws: WebSocket):
     fresh = [m for t, m in room.pending if time.monotonic() - t < PENDING_SECONDS]
     room.pending.clear()
@@ -910,7 +982,11 @@ async def events(ws: WebSocket):
     server -> {"type":"state","active":true,"owner":"...","elapsed":3.2,"text":"...","live":true}
     server -> {"type":"state","active":false,"owner":"...","final":"..."}  when a dictation ends
     server -> {"type":"segment","owner":"...","text":"..."} / {"type":"level","owner":"...","v":0.4}
+    server -> {"type":"devices"}  the client list changed; fetch /api/status
     client -> {"type":"stop"} or {"type":"cancel"}  to end another device's dictation
+    client -> {"type":"pointer","action":"move"|"scroll","dx":3,"dy":-1} or
+              {"type":"pointer","action":"click","button":"left"|"right"|"middle"}
+              from the touchpad, passed on to the active client
     """
     await ws.accept()  # Accept first so the browser sees the 4401 close code.
     if not (user := ws_user(ws)):
@@ -921,9 +997,12 @@ async def events(ws: WebSocket):
     try:
         await ws.send_json(room.snapshot())
         while True:
-            kind = (await ws.receive_json()).get("type")
+            data = await ws.receive_json()
+            kind = data.get("type")
             if kind in ("stop", "cancel") and room.active:
                 await room.active["ws"].send_json({"type": "remote_" + kind})
+            elif kind == "pointer" and (message := pointer_message(data)):
+                await send_pointer(room_for(user), message)
     except Exception:
         pass
     finally:

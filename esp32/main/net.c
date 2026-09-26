@@ -35,6 +35,10 @@ static const char *TAG = "net";
 #define REJECTED_RETRY_MS (60 * 1000)
 // Roaming: with a weak signal, move to an access point of the same network
 // that is clearly stronger (mesh systems and extenders share one name).
+// Heartbeat: a proxy in between (Cloudflare) can keep our side of a dead
+// connection open after the server restarts; no pong in time, reconnect.
+#define PING_EVERY_MS (25 * 1000)
+#define PONG_WITHIN_MS (15 * 1000)
 #define ROAM_CHECK_MS (30 * 1000)
 #define ROAM_WEAK_RSSI (-67)
 #define ROAM_MARGIN_DB 8
@@ -49,12 +53,14 @@ typedef enum {
     EV_TLS_FAILED,
     EV_ROAM_CHECK,
     EV_BLE,          // Bluetooth connected or lost: tell the server
+    EV_PING,         // heartbeat timer
 } net_event_t;
 
 static QueueHandle_t events;
 static esp_websocket_client_handle_t ws;
 static char *ws_uri, *ws_headers;
-static esp_timer_handle_t reconnect_timer, roam_timer;
+static esp_timer_handle_t reconnect_timer, roam_timer, ping_timer;
+static int64_t ping_sent_us;  // an unanswered ping, or 0
 static volatile bool wifi_up, scanning;
 static int wifi_failures;
 static bool use_ca = true;  // with a saved CA, try it first; fall back to public CAs
@@ -75,6 +81,74 @@ static void post(net_event_t ev)
 void net_ble_changed(void)
 {
     post(EV_BLE);
+}
+
+static const char *chip_name(void);
+
+// Error and warning lines for the server (GET /api/client-errors). The log
+// hook only copies them here; net_task sends them, so sending cannot recurse.
+#define LOG_SLOTS 8
+#define LOG_LINE_MAX 200
+static char log_ring[LOG_SLOTS][LOG_LINE_MAX];
+static int log_head, log_count;
+static portMUX_TYPE log_lock = portMUX_INITIALIZER_UNLOCKED;
+
+void net_report_log(const char *line)
+{
+    char clean[LOG_LINE_MAX];
+    size_t n = 0;
+    for (const char *p = line; *p && n < sizeof clean - 1; p++) {
+        if (*p == '\x1b') {  // drop colour codes
+            while (*p && *p != 'm') p++;
+            if (!*p) break;
+            continue;
+        }
+        if (*p != '\n' && *p != '\r') clean[n++] = *p;
+    }
+    clean[n] = '\0';
+    taskENTER_CRITICAL(&log_lock);
+    int last = (log_head + log_count - 1 + LOG_SLOTS) % LOG_SLOTS;
+    // The same message again (a retry loop): skip it; the timestamp differs, so compare after it.
+    const char *a = strchr(clean, ')'), *b = log_count ? strchr(log_ring[last], ')') : NULL;
+    if (!(a && b && strcmp(a, b) == 0)) {
+        if (log_count == LOG_SLOTS) {  // full: drop the oldest
+            log_head = (log_head + 1) % LOG_SLOTS;
+            log_count--;
+        }
+        strlcpy(log_ring[(log_head + log_count) % LOG_SLOTS], clean, LOG_LINE_MAX);
+        log_count++;
+    }
+    taskEXIT_CRITICAL(&log_lock);
+}
+
+static void send_log_reports(void)
+{
+    while (ws && ready && esp_websocket_client_is_connected(ws)) {
+        char line[LOG_LINE_MAX];
+        taskENTER_CRITICAL(&log_lock);
+        bool any = log_count > 0;
+        if (any) {
+            memcpy(line, log_ring[log_head], sizeof line);
+            log_head = (log_head + 1) % LOG_SLOTS;
+            log_count--;
+        }
+        taskEXIT_CRITICAL(&log_lock);
+        if (!any) {
+            return;
+        }
+        char message[LOG_LINE_MAX + 48];
+        snprintf(message, sizeof message, "%s %s: %s", esp_app_get_description()->version, chip_name(), line);
+        cJSON *m = cJSON_CreateObject();
+        cJSON_AddStringToObject(m, "type", "log");
+        cJSON_AddStringToObject(m, "level", "error");
+        cJSON_AddStringToObject(m, "message", message);
+        char *text = cJSON_PrintUnformatted(m);
+        cJSON_Delete(m);
+        if (text) {
+            esp_websocket_client_send_text(ws, text, strlen(text), pdMS_TO_TICKS(2000));
+            free(text);
+        }
+    }
 }
 
 static void send_ble_status(void)
@@ -159,6 +233,11 @@ static void reconnect_cb(void *arg)
 static void roam_cb(void *arg)
 {
     post(EV_ROAM_CHECK);
+}
+
+static void ping_cb(void *arg)
+{
+    post(EV_PING);
 }
 
 // Called from net_task. wifi_connect() always joins the strongest access point
@@ -334,11 +413,27 @@ static void handle_message(const char *text)
         if (key) {
             ble_key(key, state ? state : "press");
         }
+    } else if (strcmp(type, "pointer") == 0) {
+        const char *action = cJSON_GetStringValue(cJSON_GetObjectItem(m, "action"));
+        if (action) {
+            ble_pointer(action, (int)cJSON_GetNumberValue(cJSON_GetObjectItem(m, "dx")),
+                        (int)cJSON_GetNumberValue(cJSON_GetObjectItem(m, "dy")),
+                        cJSON_GetStringValue(cJSON_GetObjectItem(m, "button")));
+        }
+    } else if (strcmp(type, "pong") == 0) {
+        ping_sent_us = 0;
     } else if (strcmp(type, "ready") == 0 || strcmp(type, "selected") == 0) {
         vk_status_t *s = status_begin();
         s->selected = cJSON_IsTrue(cJSON_GetObjectItem(m, "selected"));
         if (strcmp(type, "ready") == 0) {
             ready = true;
+            if (!use_ca && vk_cfg.ca) {
+                // The server's certificate is publicly trusted (the private CA failed):
+                // forget the CA, so later connections skip the failing first attempt.
+                vk_cfg.ca = NULL;  // not freed: the client config may still point at it
+                config_save();
+                ESP_LOGI(TAG, "public certificate works; the private CA is no longer used");
+            }
             s->server = "connected";
             s->server_error[0] = '\0';
             s->device_id = (int)cJSON_GetNumberValue(cJSON_GetObjectItem(m, "device"));
@@ -443,6 +538,7 @@ static void on_ws(void *arg, esp_event_base_t base, int32_t id, void *data)
 static void ws_stop(void)
 {
     ready = false;
+    ping_sent_us = 0;
     if (ws) {
         esp_websocket_client_stop(ws);
         esp_websocket_client_destroy(ws);
@@ -564,8 +660,23 @@ static void net_task(void *arg)
         case EV_ROAM_CHECK:
             roam_check();
             break;
-        case EV_BLE:
+        case EV_BLE:  // also sent right after "ready": a good moment for the error reports too
             send_ble_status();
+            send_log_reports();
+            break;
+        case EV_PING:
+            if (!ws || !ready) {
+                break;
+            }
+            send_log_reports();
+            if (ping_sent_us && esp_timer_get_time() - ping_sent_us > PONG_WITHIN_MS * 1000LL) {
+                ESP_LOGW(TAG, "no answer from the server; reconnecting");
+                set_server_state("connecting", "no answer from the server");
+                ws_start();
+            } else if (!ping_sent_us) {
+                ping_sent_us = esp_timer_get_time();
+                esp_websocket_client_send_text(ws, "{\"type\":\"ping\"}", 15, pdMS_TO_TICKS(2000));
+            }
             break;
         case EV_TLS_FAILED:
             if (vk_cfg.ca) {
@@ -608,6 +719,10 @@ void net_start(void)
     esp_timer_create_args_t r = {.callback = roam_cb, .name = "wifi_roam"};
     ESP_ERROR_CHECK(esp_timer_create(&r, &roam_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(roam_timer, ROAM_CHECK_MS * 1000LL));
+    esp_timer_create_args_t hb = {.callback = ping_cb, .name = "ws_ping"};
+    ESP_ERROR_CHECK(esp_timer_create(&hb, &ping_timer));
+    // Checked twice per interval, so a missing pong is noticed within ~40 s.
+    ESP_ERROR_CHECK(esp_timer_start_periodic(ping_timer, PING_EVERY_MS / 2 * 1000LL));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     xTaskCreate(net_task, "net", 6144, NULL, 5, NULL);
     ESP_ERROR_CHECK(esp_wifi_start());  // also when unconfigured, so the page can scan

@@ -26,10 +26,13 @@ const (
 	uiDevCreate  = 0x5501     // _IO('U', 1)
 	uiDevDestroy = 0x5502     // _IO('U', 2)
 	keyLeftShift = 42
+	keyLeftCtrl  = 29
+	keyLeftAlt   = 56
 )
 
 var uinputKeys = map[string]uint16{
 	"backspace": 14, "enter": 28, "up": 103, "left": 105, "right": 106, "down": 108,
+	"escape": 1, "tab": 15, "space": 57,
 }
 
 // usLayout maps printable ASCII to (Linux key code, needs shift).
@@ -141,6 +144,36 @@ func (k *uinputKeyboard) Type(text string) error {
 }
 
 func (k *uinputKeyboard) Key(name, state string) error {
+	if c, ok := parseCombo(name); ok {
+		if state == "up" {
+			return nil
+		}
+		code, ok := uinputKeys[c.key]
+		if !ok {
+			code = usLayout[rune(c.key[0])][0]
+		}
+		var mods []uint16
+		for _, m := range []struct {
+			on   bool
+			code uint16
+		}{{c.ctrl, keyLeftCtrl}, {c.alt, keyLeftAlt}, {c.shift, keyLeftShift}} {
+			if m.on {
+				mods = append(mods, m.code)
+			}
+		}
+		seq := append(append([]uint16{}, mods...), code)
+		for _, c := range seq {
+			if err := k.key(c, true); err != nil {
+				return err
+			}
+		}
+		for i := len(seq) - 1; i >= 0; i-- {
+			if err := k.key(seq[i], false); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	code, ok := uinputKeys[name]
 	if !ok {
 		return fmt.Errorf("unsupported key %q", name)

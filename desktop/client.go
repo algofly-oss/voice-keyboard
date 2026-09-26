@@ -29,6 +29,11 @@ type message struct {
 	State      string `json:"state"`
 	Credential string `json:"credential"`
 	Selected   bool   `json:"selected"`
+	// type "pointer", from the web app's touchpad
+	Action string `json:"action"` // move, click, scroll
+	DX     int    `json:"dx"`
+	DY     int    `json:"dy"`
+	Button string `json:"button"`
 }
 
 const closeBadCredential = 4401
@@ -140,6 +145,42 @@ func serve(ctx context.Context, cfg config) error {
 // connectedAt is when the last session finished its handshake.
 var connectedAt time.Time
 
+// Errors go to the local log and to the server, which keeps them per client
+// (GET /api/client-errors), so failures on any computer can be looked up in
+// one place. Reported while offline, they wait for the next connection.
+var errorReports = make(chan string, 50)
+
+func reportError(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	log.Print(msg)
+	select {
+	case errorReports <- msg:
+	default: // the queue is full while offline; the local log still has it
+	}
+}
+
+func sendErrorReports(ctx context.Context, conn *websocket.Conn) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-errorReports:
+			b, _ := json.Marshal(struct {
+				Type    string `json:"type"`
+				Level   string `json:"level"`
+				Message string `json:"message"`
+			}{"log", "error", version + " " + runtime.GOOS + "/" + runtime.GOARCH + ": " + msg})
+			if err := conn.Write(ctx, websocket.MessageText, b); err != nil {
+				select { // not delivered: keep it for the next connection
+				case errorReports <- msg:
+				default:
+				}
+				return
+			}
+		}
+	}
+}
+
 // waitForKeyboard retries until typing is possible; at login the display
 // server may not be ready when the login item starts.
 func waitForKeyboard(ctx context.Context, cfg config) keyboard {
@@ -148,7 +189,7 @@ func waitForKeyboard(ctx context.Context, cfg config) keyboard {
 		if err == nil {
 			return kb
 		}
-		log.Printf("cannot type yet: %v; retrying in %s", err, delay)
+		reportError("cannot type yet: %v; retrying in %s", err, delay)
 		updateState(state{PID: pidSelf(), Since: time.Now(), LastError: "cannot type yet: " + err.Error()})
 		select {
 		case <-ctx.Done():
@@ -180,7 +221,7 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 		// The server upgraded an older credential; keep the new one.
 		cfg.Credential = ready.Credential
 		if err := saveConfig(cfg); err != nil {
-			log.Printf("could not save the new credential: %v", err)
+			reportError("could not save the new credential: %v", err)
 		}
 	}
 	selected := ready.Selected
@@ -191,6 +232,7 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 	// Pings detect a dead connection (sleep, network change) within ~40 s.
 	pingCtx, stopPing := context.WithCancel(ctx)
 	defer stopPing()
+	go sendErrorReports(pingCtx, conn)
 	go func() {
 		for {
 			select {
@@ -219,16 +261,18 @@ func session(ctx context.Context, cfg config, kb keyboard) error {
 			chars, started := utf8.RuneCountInString(m.Text), time.Now()
 			log.Printf("received %d characters", chars)
 			if err := kb.Type(m.Text); err != nil {
-				log.Printf("typing failed: %v", err)
+				reportError("typing failed: %v", err)
 			} else {
 				log.Printf("typed %d characters in %s", chars, time.Since(started).Round(time.Millisecond))
 			}
 		case "key":
 			if err := kb.Key(m.Key, m.State); err != nil {
-				log.Printf("key %s failed: %v", m.Key, err)
+				reportError("key %s failed: %v", m.Key, err)
 			} else if m.State == "" || m.State == "press" || m.State == "down" {
 				log.Printf("pressed %s", m.Key)
 			}
+		case "pointer":
+			handlePointer(m)
 		case "selected":
 			selected := m.Selected
 			log.Print(selectedText(selected))
@@ -262,6 +306,7 @@ func watchPermission(ctx context.Context) {
 		err := checkTypingPermission(!prompted)
 		prompted = true
 		stateMu.Lock()
+		changed := err != nil && err.Error() != warning
 		warning = ""
 		if err != nil {
 			warning = err.Error()
@@ -270,6 +315,9 @@ func watchPermission(ctx context.Context) {
 		stateMu.Unlock()
 		if s.PID != 0 {
 			updateState(s)
+		}
+		if changed { // e.g. Accessibility not allowed on macOS: typing and the touchpad fail
+			reportError("permission: %v", err)
 		}
 		if err == nil {
 			return

@@ -33,7 +33,7 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
 [tabindex="-1"]:focus{outline:none}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-.app{height:100vh;height:100dvh;max-width:480px;margin:0 auto;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
+.app{height:100vh;height:100dvh;max-width:480px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;
   padding:calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px)}
 
 .topbar{display:flex;align-items:center;gap:8px;padding:4px 0}
@@ -110,22 +110,6 @@ svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-widt
 .live-dictation .discard{display:none}  /* live text is already typed; there is nothing to discard */
 .discard:hover{background:var(--surface)}
 
-.keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
-.keys.locked .key{opacity:.35}
-/* Arrow pad, MacBook style: full-height left/right, half-height up/down stacked
-   in the middle, all in the same 68 px footprint as the other keys. */
-.dpad{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:4px;height:68px}
-.dpad .key{height:auto;min-width:0;padding:0;border-radius:10px}  /* no browser padding: all four exactly equal width */
-.dpad .key svg.i{width:18px;height:18px}
-.dpad .left{grid-area:1/1/3/2}.dpad .up{grid-area:1/2}.dpad .down{grid-area:2/2}.dpad .right{grid-area:1/3/3/4}
-.dpad .up,.dpad .down{border-radius:8px}
-.key{height:68px;border-radius:16px;border:1px solid var(--border-soft);background:var(--surface);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:600;
-  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;transition:background .12s,transform .12s var(--ease),border-color .12s}
-.key svg.i{width:22px;height:22px;color:var(--muted);transition:color .12s}
-.key:hover{background:var(--surface-2)}
-.key.pressed,.key:active{background:var(--elevated);transform:scale(.97);border-color:var(--border)}
-.key.pressed svg.i{color:var(--text)}
-.key:disabled{opacity:.45;cursor:not-allowed}
 
 .icon-btn.off{border-color:var(--accent);background:var(--accent-soft);color:#aab2ff}
 
@@ -269,8 +253,8 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .device-dot.on{background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
 .device-dot.wait{background:var(--warning);box-shadow:0 0 0 3px rgba(240,178,50,.16)}  /* online, no Bluetooth device */
 .device-tag{flex:none;font-size:11px;font-weight:700;color:#a5adff;background:var(--accent-soft);padding:2px 7px;border-radius:999px}
-.device .icon-mini{flex:none;width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
-.device .icon-mini svg.i{width:16px;height:16px}
+.device .icon-mini,.group-head .icon-mini{flex:none;width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
+.device .icon-mini svg.i,.group-head .icon-mini svg.i{width:16px;height:16px}
 .login input[type=text]{width:100%}
 .link-btn{border:0;background:none;padding:6px 0;color:#a5adff;font-size:14px;font-weight:600}
 .link-btn:disabled{color:var(--subtle)}
@@ -314,6 +298,75 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .shake{animation:shake .4s}
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+.group-head .icon-mini:hover,.device .icon-mini:hover{background:var(--elevated);color:var(--text)}
+
+/* Full keyboard (Gboard-like). Keys act on pointerdown and never take focus, so nothing gets selected. */
+.vkb{--kh:46px;min-width:0;display:flex;flex-direction:column;gap:7px;margin-top:6px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+.vkb-row{display:flex;gap:5px}
+.vk{flex:1 1 0;min-width:0;height:var(--kh);padding:0;border:0;border-radius:8px;background:var(--surface);color:var(--text);font-size:20px;line-height:1;
+  display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 1px 0 rgba(0,0,0,.4);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;transition:background .08s}
+.vk svg.i{width:21px;height:21px}
+.vk.fn{background:var(--elevated);color:var(--muted);font-size:14px;font-weight:650}
+.vk.fn svg.i{color:var(--text)}
+.vk.pressed{background:#4a4d55}
+.vk.wide{flex-grow:1.55}.vk.space{flex-grow:5.2;color:var(--subtle);font-size:13px}.vk.gap{flex-grow:.5;visibility:hidden}
+.vk.enter{background:var(--accent)}.vk.enter.pressed{background:var(--accent-hover)}.vk.enter svg.i{color:#fff}
+.vk:disabled{opacity:.4}
+.vk-pop{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);min-width:calc(100% + 8px);height:calc(var(--kh) + 8px);padding:0 6px;border-radius:10px;
+  background:#4a4d55;color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);pointer-events:none;z-index:2}
+/* The toolbar lines up with the number row: ten equal keys. */
+.vkb-bar .vk{height:calc(var(--kh) * .8);background:var(--surface-2);font-size:12px;letter-spacing:-.01em}
+.vkb-bar .vk svg.i{width:18px;height:18px}
+.vk.fn.on{background:var(--accent-soft);color:#fff;box-shadow:inset 0 0 0 1.5px var(--accent)}
+.vk.fn.on svg.i{color:#fff}
+.vk.fn.locked{background:var(--accent);color:#fff}
+.vk.mic-mini{display:none;border-radius:999px;background:var(--accent)}
+.vk.mic-mini svg.i{color:#fff}
+.recording .vk.mic-mini{background:var(--danger)}
+.busy .vk.mic-mini{background:var(--elevated)}
+/* A smaller microphone, so it fits above the keyboard. */
+.stage{padding-top:4px}
+.mic-wrap{width:124px;height:124px}
+.mic{width:96px;height:96px}
+.mic svg.i{width:38px;height:38px}
+.spinner{width:44px;height:44px}
+.caption{height:calc(17px*1.4)}
+
+/* Touchpad (portrait): it takes the microphone's place; the small microphone
+   key moves into the toolbar, as in landscape. */
+.touchpad{flex:1;min-height:0;width:100%;border-radius:16px;background:var(--surface);border:1px solid var(--border-soft);display:grid;place-items:center;
+  touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:background .15s}
+.touchpad.touching{background:var(--surface-2)}
+.touchpad[hidden]{display:none}  /* display:grid would override [hidden] */
+.tp-hint{color:var(--subtle);font-size:13px;line-height:1.6;text-align:center;padding:0 20px;pointer-events:none}
+.app.touchpad-on .stage{display:flex;flex-direction:column;gap:8px;padding:4px 0 0}
+.app.touchpad-on .stage .above,.app.touchpad-on .stage .mic-row{display:none}
+.app.touchpad-on .stage .below{flex-direction:row;justify-content:center;gap:12px;padding:0;min-height:28px}
+.app.touchpad-on .wave{width:90px;height:20px}
+.app.touchpad-on .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex:1;min-width:0}
+.app.touchpad-on .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app.touchpad-on .vk.mic-mini{display:flex}
+/* The compact status line (touchpad, landscape): the level bars and Discard only
+   while recording, so an idle status line gets the whole width. */
+.app.touchpad-on .caption.empty,html.landscape .caption.empty{display:none}
+.app.touchpad-on:not(.recording) :is(.wave,.discard),html.landscape .app:not(.recording) :is(.wave,.discard){display:none}
+.app.touchpad-on .status,html.landscape .status{flex:1 1 auto;min-width:0;text-align:center}
+html.landscape .touchpad{display:none}
+
+/* A phone or tablet held sideways: a slim status line, then a full-width
+   keyboard with a small microphone key in its toolbar (like Gboard's). */
+html.landscape .app{max-width:1100px;grid-template-rows:auto auto minmax(0,1fr);padding-top:calc(env(safe-area-inset-top) + 4px)}
+html.landscape .topbar{height:40px;padding:0}
+html.landscape .stage{display:flex;align-items:center;justify-content:center;padding:0;min-height:28px}
+html.landscape .stage .above,html.landscape .stage .mic-row{display:none}
+html.landscape .stage .below{flex-direction:row;justify-content:center;gap:12px;padding:0}
+html.landscape .wave{width:90px;height:20px}
+html.landscape .caption{max-width:none;height:calc(15px*1.4);font-size:15px;flex:1;min-width:0}
+html.landscape .status{min-height:0;font-size:14px;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.landscape .discard{height:28px}
+html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),52px);gap:6px}
+html.landscape .vk.mic-mini{display:flex}
 </style>
 </head>
 <body>
@@ -322,12 +375,13 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
     <h1 class="sr-only">Voice Keyboard</h1>
     <div class="chips">
       <span class="chip" id="serverChip" data-state="wait" role="img" aria-label="Server status"><i data-i="server"></i></span>
-      <span class="chip" id="desktopChip" data-state="wait" role="img" aria-label="Desktop client status"><i data-i="keyboard"></i></span>
+      <span class="chip" id="desktopChip" data-state="wait" role="img" aria-label="Client status"><i data-i="keyboard"></i></span>
     </div>
     <button class="icon-btn round" id="openSettings" aria-label="Settings" aria-haspopup="dialog"><i data-i="settings"></i></button>
   </header>
 
   <main class="stage" id="stage">
+    <div class="touchpad" id="touchpad" role="application" aria-label="Touchpad" hidden><span class="tp-hint">Touchpad<br>tap to click · two fingers: right-click, scroll</span></div>
     <div class="above"><div class="timer" id="timer" aria-hidden="true">0:00</div></div>
     <div class="mic-row">
       <div class="mic-wrap">
@@ -345,16 +399,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
     </div>
   </main>
 
-  <nav class="keys" aria-label="Keys">
-    <button class="key" data-key="backspace" aria-label="Backspace. Hold to repeat."><i data-i="delete"></i>Backspace</button>
-    <div class="dpad" role="group" aria-label="Arrow keys. Hold to repeat.">
-      <button class="key up" data-key="up" aria-label="Up"><i data-i="up"></i></button>
-      <button class="key left" data-key="left" aria-label="Left"><i data-i="left"></i></button>
-      <button class="key down" data-key="down" aria-label="Down"><i data-i="down"></i></button>
-      <button class="key right" data-key="right" aria-label="Right"><i data-i="right"></i></button>
-    </div>
-    <button class="key" id="enter" aria-label="Enter"><i data-i="enter"></i>Enter</button>
-  </nav>
+  <div class="vkb" id="vkb" role="group" aria-label="Keyboard"></div>
 </div>
 
 <div class="login" id="login" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
@@ -397,6 +442,9 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
         <label class="switch-row" for="f-live"><span class="text"><span class="title">Type while speaking</span>
           <span class="hint">Each phrase is typed as soon as it is recognized. Turn off to type everything when you stop.</span></span>
           <span class="switch"><input type="checkbox" id="f-live" name="liveTyping" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
+        <label class="switch-row" for="f-touchpad"><span class="text"><span class="title">Touchpad</span>
+          <span class="hint">In portrait, the top of the screen moves the mouse of the active client: one finger moves, a tap clicks, a two-finger tap right-clicks, two fingers scroll.</span></span>
+          <span class="switch"><input type="checkbox" id="f-touchpad" name="touchpad" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
         <p class="callout translate-note" hidden><i data-i="alert"></i><span>This server translates: speak any language and it types English.</span></p>
         <div class="field"><label for="f-pace">Typing speed</label>
           <select id="f-pace" name="pace">
@@ -497,6 +545,8 @@ const ICONS={
   edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  shift:'<path d="M9 20v-6H4l8-10 8 10h-5v6z"/>',
+  caps:'<path d="M9 16v-4H4l8-9 8 9h-5v4zM8 21h8"/>',
   monitor:'<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
   cpu:'<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
   up:'<path d="m18 15-6-6-6 6"/>',down:'<path d="m6 9 6 6 6-6"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',
@@ -512,6 +562,8 @@ const app=$('#app'),mic=$('#mic'),statusEl=$('#status'),timerEl=$('#timer'),wave
 const BARS=31;for(let i=0;i<BARS;i++)wave.appendChild(document.createElement('span'));
 const bars=[...wave.children];
 let cfg={},deviceStatus={},state='idle';
+// Switch settings are saved as '1'/'0' (and come as booleans from the server); '0' is truthy, so never test them with !!.
+const isOn=v=>v===true||v==='1'||v===1;
 
 // ---------- Helpers ----------
 let toastTimer;
@@ -551,10 +603,10 @@ async function pollDevice(){
   const sel=deviceStatus.selected;
   // An ESP32 board is only ready when a computer is connected to it over Bluetooth.
   const ready=sel?.online&&sel.bluetooth!=='waiting';
-  setChip($('#desktopChip'),ready?'ok':sel?'wait':'bad',sel?sel.name:'No client',
-    !sel?'No client selected. Add one in Settings → Clients'
+  const status=!sel?'No client selected. Add one in Settings → Clients'
     :sel.online&&sel.bluetooth==='waiting'?`${sel.name} is online, but no device is connected to it over Bluetooth`
-    :`Typing on ${sel.name} (${sel.online?'online':'offline'}${sel.bluetooth==='connected'?', Bluetooth connected':''})`);
+    :`Typing on ${sel.name} (${sel.online?'online':'offline'}${sel.bluetooth==='connected'?', Bluetooth connected':''})`;
+  setChip($('#desktopChip'),ready?'ok':sel?'wait':'bad',sel?sel.name:'No client',status);
   renderDevices(deviceStatus.devices);lockKeys(!sel?.online);
 }
 async function checkServer(url){
@@ -618,7 +670,7 @@ async function startDictation(){
     if(idle>2500)ctx.resume().catch(()=>{});
     if(idle>5000)fail('The microphone stopped sending audio. Please try again.')},1000);
 
-  pending=[];stopRequested=false;live=!!cfg.liveTyping;typedAny=false;liveError=false;liveChain=Promise.resolve();
+  pending=[];stopRequested=false;live=isOn(cfg.liveTyping);typedAny=false;liveError=false;liveChain=Promise.resolve();
   carried='';connText='';sentLog=[];sentBytes=0;retryDelay=1000;reconnecting=false;
   if(!openStream())return;
   node.port.onmessage=e=>{
@@ -761,7 +813,8 @@ function connectEvents(){
   if(!cfg.serverUrl||(location.protocol==='https:'&&serverUrl('').protocol==='http:'))return;
   const u=serverUrl('/v1/events');u.protocol=u.protocol==='https:'?'wss:':'ws:';
   let e;try{e=events=new WebSocket(u)}catch{return}
-  e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.type==='devices')return pollDevice();if(m.owner===clientId)return;
+  e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.type==='devices')return pollDevice();
+    if(m.owner===clientId)return;
     if(m.type==='state'){if(m.active)enterRemote(m);else if(remote)exitRemote(m.final)}
     else if(m.type==='level'&&remote)remote.level=m.v;
     else if(m.type==='segment'&&remote)caption(m.text)};
@@ -782,25 +835,178 @@ $('#discard').addEventListener('click',()=>state==='remote'?(sendEvent('cancel')
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document.body&&!$('#sheet').open){e.preventDefault();mic.click()}});
 
 // ---------- Keys ----------
-// Requests are chained so "down", "hold" and "up" reach the ESP32 in order.
-let keyChain=Promise.resolve();
+// Keys and on-screen typing go out one request at a time, in order ("down",
+// "hold" and "up" must reach an ESP32 in order too). Letters typed while a
+// request is in flight are merged into the next one.
+const outbox=[];let sending=false;
+function queueOut(op){const last=outbox[outbox.length-1];
+  if(op.text!==undefined&&last&&last.text!==undefined&&!last.sent)last.text+=op.text;else outbox.push(op);pumpOut()}
+async function pumpOut(){if(sending)return;sending=true;
+  while(outbox.length){const op=outbox[0];op.sent=true;
+    try{const r=op.text!==undefined
+        ?await fetch('/api/type',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:op.text})})
+        :await fetch('/api/key?'+op.key,{method:'POST'});
+      if(!r.ok)toast(await r.text(),{error:true})}catch{}
+    outbox.shift()}
+  sending=false}
 // The ESP32 presses the "after dictation" key itself; the backend needs it sent.
 function pressAfterKey(){if(cfg.afterText==='space'||cfg.afterText==='enter')sendKey('k='+cfg.afterText)}
-function sendKey(query){keyChain=keyChain.then(()=>fetch('/api/key?'+query,{method:'POST'}).then(async r=>{if(!r.ok)toast(await r.text(),{error:true})})).catch(()=>{})}
-// Backspace and the arrows: one press per tap, auto-repeat while held.
-document.querySelectorAll('[data-key]').forEach(function holdToRepeat(btn){
-  const k='k='+btn.dataset.key;let held=false,renew=0;
-  const down=e=>{if(held||btn.disabled)return;e.preventDefault();held=true;btn.classList.add('pressed');e.pointerId!==undefined&&btn.setPointerCapture?.(e.pointerId);
-    sendKey(k+'&s=down');renew=setInterval(()=>sendKey(k+'&s=hold'),150)};
-  const up=()=>{if(!held)return;held=false;clearInterval(renew);btn.classList.remove('pressed');sendKey(k+'&s=up')};
+function sendKey(query){queueOut({key:query})}
+function typeText(text){queueOut({text})}
+// ---------- Modifiers ----------
+// Ctrl, Alt and Shift are sticky: a tap latches one for the next key, and
+// holding it applies it to every key pressed meanwhile. A tap on an active
+// modifier turns it off. Shift also types capitals; a double tap locks
+// capitals (caps lock only affects letters, not combinations).
+const mods={ctrl:{},alt:{},shift:{}};
+const modActive=m=>!!(mods[m].latched||mods[m].held);
+const comboPrefix=()=>['ctrl','alt','shift'].filter(modActive).map(m=>m+'+').join('');
+const capitals=()=>modActive('shift')||!!mods.shift.lock;
+const keyQuery=name=>'k='+encodeURIComponent(name);
+// After a key: a held modifier counts as used, a latched one is released.
+function afterKey(){let changed=false;
+  for(const m in mods){if(mods[m].held)mods[m].used=true;if(mods[m].latched){mods[m].latched=false;changed=true}}
+  if(changed)renderMods()}
+function modKey(b,m){
+  b.dataset.mod=m;
+  b.addEventListener('pointerdown',e=>{e.preventDefault();if(b.disabled)return;const s=mods[m],now=Date.now();
+    if(m==='shift'&&s.latched&&now-(s.lastTap||0)<320){s.latched=false;s.lock=true;s.skip=true}
+    else if(s.latched||s.lock){s.latched=false;s.lock=false;s.skip=true}
+    else{s.held=true;s.used=false}
+    s.lastTap=now;renderMods()});
+  const up=()=>{const s=mods[m];if(s.skip){s.skip=false;return}if(!s.held)return;s.held=false;if(!s.used)s.latched=true;renderMods()};
+  ['pointerup','pointercancel'].forEach(n=>b.addEventListener(n,up));
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+}
+// Updates the keys in place (no rebuild, so a held key keeps its pointer).
+function renderMods(){
+  document.querySelectorAll('#vkb [data-mod]').forEach(b=>{const m=b.dataset.mod;
+    b.classList.toggle('on',modActive(m));b.classList.toggle('locked',m==='shift'&&!!mods.shift.lock);
+    if(m==='shift'){b.innerHTML=svg(mods.shift.lock?'caps':'shift');b.setAttribute('aria-label',mods.shift.lock?'Caps lock on':'Shift')}
+    b.setAttribute('aria-pressed',modActive(m)||(m==='shift'&&!!mods.shift.lock))});
+  document.querySelectorAll('#vkb [data-base]').forEach(b=>{const base=b.dataset.base;
+    b.firstChild.textContent=vkbLayer==='abc'&&capitals()?base.toUpperCase():base});
+}
+
+// Named keys (arrows, Backspace, Enter, Esc, Tab): one press per tap and
+// auto-repeat while held. With a modifier on, the whole combination repeats.
+function holdToRepeat(btn){
+  const key=btn.dataset.key;let held=false,renew=0,combo='';
+  const down=e=>{if(held||btn.disabled)return;e.preventDefault();held=true;btn.classList.add('pressed');
+    try{btn.setPointerCapture(e.pointerId)}catch{}  // keeps "up" coming if the finger slides off
+    combo=comboPrefix();
+    if(combo){const q=keyQuery(combo+key);sendKey(q);renew=setInterval(()=>sendKey(q),150);afterKey()}
+    else{sendKey(keyQuery(key)+'&s=down');renew=setInterval(()=>sendKey(keyQuery(key)+'&s=hold'),150)}};
+  const up=()=>{if(!held)return;held=false;clearInterval(renew);btn.classList.remove('pressed');if(!combo)sendKey(keyQuery(key)+'&s=up')};
   btn.addEventListener('pointerdown',down);['pointerup','pointercancel','lostpointercapture'].forEach(n=>btn.addEventListener(n,up));
   btn.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.repeat)down(e)});btn.addEventListener('keyup',up);btn.addEventListener('blur',up);
   btn.addEventListener('contextmenu',e=>e.preventDefault());
-});
-$('#enter').addEventListener('click',()=>sendKey('k=enter'));
+}
+// A key pressed once: Enter, the Ctrl+C / Ctrl+A shortcuts.
+function pressOnce(b,name,withMods=true){b.addEventListener('pointerdown',e=>{e.preventDefault();if(b.disabled)return;
+  sendKey(keyQuery((withMods?comboPrefix():'')+name));afterKey()})}
+
+// ---------- Full keyboard ----------
+// Layers as rows of keys: a character, or one of the function keys below.
+const VKB_LAYERS={
+  abc:[[...'1234567890'],[...'qwertyuiop'],['GAP',...'asdfghjkl','GAP'],['SHIFT',...'zxcvbnm','BKSP'],['SYM',',','SPACE','.','ENTER']],
+  sym:[[...'1234567890'],[...'@#$%&-+()/'],['GAP',...'*"\':;!?_','GAP'],['MORE',...'~`|\\^<>','BKSP'],['ABC',',','SPACE','.','ENTER']],
+  more:[[...'[]{}€£¥°•§'],[...'=±×÷¶©®™…₹'],['GAP',...'«»¡¿¢','GAP'],['SYM',...'✓','BKSP'],['ABC',',','SPACE','.','ENTER']],
+};
+let vkbLayer='abc',keysLocked=false;
+function vkbKey(token){
+  const b=document.createElement('button');b.type='button';b.className='vk';b.tabIndex=-1;
+  const fn=(label,cls)=>{b.className='vk fn '+(cls||'');if(label.startsWith('<'))b.innerHTML=label;else b.textContent=label};
+  switch(token){
+    case 'GAP':b.className='vk gap';b.setAttribute('aria-hidden','true');return b;
+    case 'SHIFT':fn(svg('shift'),'wide');modKey(b,'shift');return b;
+    case 'BKSP':fn(svg('delete'),'wide');b.dataset.key='backspace';b.setAttribute('aria-label','Backspace');holdToRepeat(b);return b;
+    case 'ENTER':fn(svg('enter'),'wide enter');b.setAttribute('aria-label','Enter');pressOnce(b,'enter');return b;
+    case 'SYM':case 'ABC':case 'MORE':fn(token==='ABC'?'ABC':token==='SYM'?'?123':'=\\<','wide');
+      b.addEventListener('pointerdown',e=>{e.preventDefault();vkbLayer={ABC:'abc',SYM:'sym',MORE:'more'}[token];renderVkb()});return b;
+    case 'SPACE':b.className='vk space';b.setAttribute('aria-label','Space');b.append(document.createTextNode('space'));charKey(b,' ');return b;
+  }
+  b.dataset.base=token;b.append(document.createTextNode(token));charKey(b,token,true);return b;
+}
+// A character key: types on press (no waiting for release, so fast two-thumb
+// typing keeps every letter), and shows the character above the finger. With
+// Ctrl or Alt on, a letter, digit or space goes out as a combination instead.
+function charKey(b,base,pop){
+  let bubble=null;
+  const current=()=>vkbLayer==='abc'&&capitals()?base.toUpperCase():base;
+  const emit=()=>{const combo=comboPrefix(),chord=modActive('ctrl')||modActive('alt');
+    if(chord&&/^[a-z0-9 ]$/i.test(base))sendKey(keyQuery(combo+(base===' '?'space':base.toLowerCase())));
+    else typeText(current());
+    afterKey()};
+  const release=()=>{b.classList.remove('pressed');bubble?.remove();bubble=null};
+  b.addEventListener('pointerdown',e=>{e.preventDefault();if(b.disabled)return;b.classList.add('pressed');
+    if(pop){bubble=Object.assign(document.createElement('span'),{className:'vk-pop',textContent:current()});b.append(bubble)}
+    emit();navigator.vibrate?.(5)});
+  ['pointerup','pointercancel','pointerleave'].forEach(n=>b.addEventListener(n,release));
+  b.addEventListener('click',e=>{if(e.detail===0&&!b.disabled)emit()});  // keyboard or switch access
+  b.addEventListener('contextmenu',e=>e.preventDefault());
+}
+function renderVkb(){
+  const kb=$('#vkb'),bar=document.createElement('div');bar.className='vkb-row vkb-bar';
+  const tool=(html,label,cls='')=>{const b=document.createElement('button');b.type='button';b.className='vk fn '+cls;b.tabIndex=-1;b.innerHTML=html;b.setAttribute('aria-label',label);b.title=label;bar.append(b);return b};
+  const key=(html,label,name)=>{const b=tool(html,label);b.dataset.key=name;holdToRepeat(b)};
+  key('Esc','Escape','escape');
+  key('Tab','Tab','tab');
+  modKey(tool('Ctrl','Ctrl (tap: next key, hold: while held)'),'ctrl');
+  modKey(tool('Alt','Alt (tap: next key, hold: while held)'),'alt');
+  pressOnce(tool('^C','Ctrl+C: interrupt'),'ctrl+c',false);
+  pressOnce(tool('^A','Ctrl+A: select all'),'ctrl+a',false);
+  for(const [k,label] of [['left','Left'],['up','Up'],['down','Down'],['right','Right']])key(svg(k),label,k);
+  // Landscape only: the big microphone is hidden there.
+  const mic=tool(svg('mic'),'Dictate','mic-mini');mic.dataset.alwaysOn='';
+  mic.addEventListener('pointerdown',e=>e.preventDefault());mic.addEventListener('click',()=>$('#mic').click());
+  kb.replaceChildren(bar,...VKB_LAYERS[vkbLayer].map(row=>{const r=document.createElement('div');r.className='vkb-row';r.append(...row.map(vkbKey));return r}));
+  kb.querySelectorAll('button:not([data-always-on])').forEach(b=>b.disabled=keysLocked);
+  renderMods();
+}
+renderVkb();
+
+// ---------- Touchpad ----------
+// Pointer input goes over the live /v1/events socket, summed per animation frame.
+function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle('touchpad-on',on);$('#touchpad').hidden=!on}
+(function touchpad(){
+  const pad=$('#touchpad'),fingers=new Map(),move={x:0,y:0},scroll={x:0,y:0};
+  const SCROLL_PX=18;  // finger travel per scroll step
+  let gesture=null,frame=0;
+  const send=m=>{if(events?.readyState===1)events.send(JSON.stringify({type:'pointer',...m}))};
+  const flush=()=>{frame=0;
+    const mx=Math.round(move.x),my=Math.round(move.y);if(mx||my){send({action:'move',dx:mx,dy:my});move.x-=mx;move.y-=my}
+    const sx=Math.trunc(scroll.x),sy=Math.trunc(scroll.y);if(sx||sy){send({action:'scroll',dx:sx,dy:sy});scroll.x-=sx;scroll.y-=sy}};
+  const later=()=>{frame||=requestAnimationFrame(flush)};
+  pad.addEventListener('pointerdown',e=>{e.preventDefault();try{pad.setPointerCapture(e.pointerId)}catch{}
+    fingers.set(e.pointerId,{x:e.clientX,y:e.clientY,t:e.timeStamp});
+    if(fingers.size===1)gesture={start:e.timeStamp,travel:0,most:1};else if(gesture)gesture.most=Math.max(gesture.most,fingers.size);
+    pad.classList.add('touching')});
+  pad.addEventListener('pointermove',e=>{const f=fingers.get(e.pointerId);if(!f||!gesture)return;
+    const dx=e.clientX-f.x,dy=e.clientY-f.y,dt=Math.max(1,e.timeStamp-f.t);Object.assign(f,{x:e.clientX,y:e.clientY,t:e.timeStamp});
+    gesture.travel+=Math.abs(dx)+Math.abs(dy);
+    if(fingers.size===1){  // faster swipes go further, like a laptop touchpad
+      const gain=1.3+Math.min(2.2,Math.hypot(dx,dy)/dt*1.4);move.x+=dx*gain;move.y+=dy*gain}
+    else{  // two fingers: scroll, the content following the fingers; each finger adds half
+      scroll.x-=dx/SCROLL_PX/fingers.size;scroll.y-=dy/SCROLL_PX/fingers.size}
+    later()});
+  const lift=e=>{if(!fingers.delete(e.pointerId))return;if(fingers.size)return;
+    pad.classList.remove('touching');
+    if(gesture&&gesture.travel<12&&e.timeStamp-gesture.start<320){send({action:'click',button:gesture.most>=2?'right':'left'});navigator.vibrate?.(8)}
+    gesture=null};
+  ['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,lift));
+  pad.addEventListener('contextmenu',e=>e.preventDefault());
+})();
+
+// Phones and tablets lay out by how they are held; computers stay in portrait.
+const touchDevice=matchMedia('(pointer: coarse)').matches;
+function applyOrientation(){document.documentElement.classList.toggle('landscape',touchDevice&&innerWidth>innerHeight)}
+addEventListener('resize',applyOrientation);
+applyOrientation();
+
 
 // Disconnecting brings back the device's on-screen keyboard; dictating reconnects.
-function lockKeys(locked){$('.keys').classList.toggle('locked',locked);document.querySelectorAll('.keys button').forEach(b=>b.disabled=locked)}
+function lockKeys(locked){keysLocked=locked;document.querySelectorAll('#vkb button:not([data-always-on])').forEach(b=>b.disabled=locked)}
 
 // In-app confirmation dialog (instead of the browser's confirm()).
 function ask(title,text,{ok='Confirm',danger=false}={}){
@@ -821,13 +1027,13 @@ tabs.forEach((t,i)=>{t.addEventListener('click',()=>selectTab(t.id.slice(4)));
 function fillForm(){
   for(const el of form.elements){if(!el.name)continue;const v=cfg[el.name];
     if(el.type==='radio')el.checked=el.value===v;
-    else if(el.type==='checkbox')el.checked=!!v;
+    else if(el.type==='checkbox')el.checked=isOn(v);
     else if(el.name==='wifiPassword'||el.name==='webPassword')el.value='';
     else if(v!==undefined){if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===String(v)))el.add(new Option(String(v),v));el.value=v}}
   saveBtn.disabled=true;
 }
 function changes(){const out=new URLSearchParams();
-  for(const el of form.querySelectorAll('input[type=checkbox][name]'))if(el.checked!==!!cfg[el.name])out.set(el.name,el.checked?'1':'0');
+  for(const el of form.querySelectorAll('input[type=checkbox][name]'))if(el.checked!==isOn(cfg[el.name]))out.set(el.name,el.checked?'1':'0');
   for(const[k,v]of new FormData(form)){if(form.elements[k]?.type==='checkbox')continue;if(k==='wifiPassword'||k==='webPassword'?v:String(cfg[k]??'')!==v)out.set(k,v)}return out}
 form.addEventListener('input',()=>{saveBtn.disabled=![...changes()].length});
 
@@ -852,7 +1058,7 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
 
 
 // Settings this browser keeps; everything else comes from the server on each load.
-const USER_PREFS=['liveTyping','language','afterText','pace'];
+const USER_PREFS=['liveTyping','touchpad','language','afterText','pace'];
 function userPrefs(o){return Object.fromEntries(USER_PREFS.filter(k=>k in o).map(k=>[k,o[k]]))}
 async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=userPrefs(JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}'));/* only the user's own preferences; server facts (variant, CA, model) always come from the server */cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}const translating=cfg.variant==='translate';$('#languageField').hidden=translating;$('.translate-note').hidden=!translating}
 
@@ -861,7 +1067,7 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     const body=changes();if(![...body].length)return;
     for(const [key,value] of body)cfg[key]=value;
     localStorage.setItem('voice-keyboard-settings',JSON.stringify(userPrefs(cfg)));
-    saveBtn.disabled=true;closeSheet();toast('Settings saved');
+    saveBtn.disabled=true;closeSheet();toast('Settings saved');applyTouchpad();
   });
   let install=null,installOs=/Win/.test(navigator.platform||navigator.userAgent)?'windows':'unix';
   function renderInstall(){
@@ -1021,6 +1227,7 @@ $('#signOut').addEventListener('click',async()=>{await nativeFetch('/api/logout'
 let started=false;
 async function start(){
   try{await loadSettings()}catch(e){if(e.message!=='401')toast('Cannot reach the server.',{error:true});return}
+  applyTouchpad();
   pollDevice();pollServer();reconnectEvents();
   if(!started){started=true;setInterval(()=>locked||pollDevice(),3000);setInterval(()=>locked||pollServer(),15000)}
 }

@@ -40,7 +40,13 @@ const (
 var x11Keys = map[string]uint64{
 	"backspace": xkBackSpace, "enter": xkReturn,
 	"left": 0xff51, "up": 0xff52, "right": 0xff53, "down": 0xff54,
+	"escape": 0xff1b, "tab": xkTab, "space": 0x20,
 }
+
+const (
+	xkControlL = 0xffe3
+	xkAltL     = 0xffe9
+)
 
 func newX11Keyboard() (*x11Keyboard, error) {
 	x11, err := purego.Dlopen("libX11.so.6", purego.RTLD_NOW|purego.RTLD_GLOBAL)
@@ -179,6 +185,41 @@ func (k *x11Keyboard) Type(text string) error {
 }
 
 func (k *x11Keyboard) Key(name, state string) error {
+	if c, ok := parseCombo(name); ok {
+		if state == "up" {
+			return nil
+		}
+		sym, ok := x11Keys[c.key]
+		if !ok {
+			sym = uint64(c.key[0]) // Latin letters and digits: the keysym is the character
+		}
+		positions, err := k.keymap()
+		if err != nil {
+			return err
+		}
+		var seq []uint32
+		for _, m := range []struct {
+			on  bool
+			sym uint64
+		}{{c.ctrl, xkControlL}, {c.alt, xkAltL}, {c.shift, xkShiftL}, {true, sym}} {
+			if !m.on {
+				continue
+			}
+			p, found := positions[m.sym]
+			if !found {
+				return fmt.Errorf("%s is not in the X keyboard mapping", name)
+			}
+			seq = append(seq, p.code)
+		}
+		for _, code := range seq {
+			k.xTestFakeKeyEvent(k.display, code, 1, 0)
+		}
+		for i := len(seq) - 1; i >= 0; i-- {
+			k.xTestFakeKeyEvent(k.display, seq[i], 0, 0)
+		}
+		k.xFlush(k.display)
+		return nil
+	}
 	sym, ok := x11Keys[name]
 	if !ok {
 		return fmt.Errorf("unsupported key %q", name)
