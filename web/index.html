@@ -402,7 +402,15 @@ html.signed-out .login{opacity:1;pointer-events:auto;transition:none}  /* the se
 .touchpad.touching{background:var(--surface-2)}
 .touchpad.dragging{background:var(--accent-soft);border-color:var(--accent)}
 .touchpad.active{border-color:var(--accent)}  /* a mouse clicked it: moving over it moves the device */
-.touchpad[hidden]{display:none}  /* display:grid would override [hidden] */
+.touchpad[hidden]{display:none}
+/* Settings → Mouse buttons: a laptop's two buttons along the bottom edge. Hold
+   one and move with another finger to drag; tap it to click. */
+.touchpad{position:relative;overflow:hidden}
+.tp-buttons{position:absolute;left:0;right:0;bottom:0;height:52px;display:flex;border-top:1px solid var(--border-soft)}
+.tp-buttons[hidden]{display:none}
+.tp-btn{flex:1;border:0;padding:0;background:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+.tp-btn+.tp-btn{border-left:1px solid var(--border-soft)}
+.tp-btn.pressed{background:var(--accent-soft)}  /* display:grid would override [hidden] */
 .tp-hint{color:var(--subtle);font-size:13px;line-height:1.6;text-align:center;padding:0 20px;pointer-events:none}
 .app.touchpad-on .stage{display:flex;flex-direction:column;gap:8px;padding:4px 0 0}
 .app.touchpad-on .stage .above,.app.touchpad-on .stage .mic-row{display:none}
@@ -464,7 +472,8 @@ html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),
   </header>
 
   <main class="stage" id="stage">
-    <div class="touchpad" id="touchpad" role="application" aria-label="Touchpad" hidden><span class="tp-hint">Touchpad<br>tap to click · two fingers: right-click, scroll</span></div>
+    <div class="touchpad" id="touchpad" role="application" aria-label="Touchpad" hidden><span class="tp-hint">Touchpad<br>tap to click · two fingers: right-click, scroll</span>
+      <div class="tp-buttons" id="tpButtons" hidden><button type="button" class="tp-btn" data-button="left" aria-label="Left button"></button><button type="button" class="tp-btn" data-button="right" aria-label="Right button"></button></div></div>
     <div class="above"><div class="timer" id="timer" aria-hidden="true">0:00</div></div>
     <div class="mic-row">
       <div class="mic-wrap">
@@ -558,6 +567,9 @@ html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),
         <label class="switch-row" for="f-touchpad"><span class="text"><span class="title">Touchpad</span>
           <span class="hint">In portrait: move, tap to click, two fingers scroll</span></span>
           <span class="switch"><input type="checkbox" id="f-touchpad" name="touchpad" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
+        <label class="switch-row" for="f-mbuttons"><span class="text"><span class="title">Mouse buttons</span>
+          <span class="hint">Left and right buttons under the touchpad: hold one to drag</span></span>
+          <span class="switch"><input type="checkbox" id="f-mbuttons" name="mouseButtons" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
         <label class="switch-row" for="f-reverse"><span class="text"><span class="title">Reverse scrolling</span>
           <span class="hint">Two-finger scroll moves the other way</span></span>
           <span class="switch"><input type="checkbox" id="f-reverse" name="reverseScroll" role="switch"><span class="track"></span><span class="thumb"></span></span></label>
@@ -1132,14 +1144,15 @@ function renderVkb(){
   renderMods();
   modLabels();
 }
-renderVkb();
+renderVkb();applyTouchpad();  // with the settings sent with the page, before the first frame
 $('#micMini').addEventListener('click',()=>$('#mic').click());
 $('#desktopChip').addEventListener('click',()=>{const sel=deviceStatus.selected;
   if(sel?.online&&/^esp32/i.test(sel.platform||''))setBluetooth(sel.bluetooth==='off')});
 
 // ---------- Touchpad ----------
 // Pointer input goes over the live /v1/events socket, summed per animation frame.
-function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle('touchpad-on',on);$('#touchpad').hidden=!on}
+function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle('touchpad-on',on);$('#touchpad').hidden=!on;
+  $('#tpButtons').hidden=!isOn(cfg.mouseButtons)}
 (function touchpad(){
   const pad=$('#touchpad'),fingers=new Map(),move={x:0,y:0},scroll={x:0,y:0};
   const SCROLL_PX=18;  // finger travel per scroll step
@@ -1180,7 +1193,8 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
   addEventListener('pagehide',release);document.addEventListener('visibilitychange',()=>{if(document.hidden)release()});
   // Touch events, not pointer events: only cancelling them stops iOS Safari from
   // panning and zooming the page with two fingers (it ignores touch-action there).
-  const each=(e,fn)=>{e.preventDefault();for(const t of e.changedTouches)fn(t.identifier,t.clientX,t.clientY,e.timeStamp)};
+  const onButton=el=>el?.closest?.('.tp-btn');  // the mouse buttons have their own handlers below
+  const each=(e,fn)=>{e.preventDefault();for(const t of e.changedTouches)if(!onButton(t.target))fn(t.identifier,t.clientX,t.clientY,e.timeStamp)};
   pad.addEventListener('touchstart',e=>each(e,down),{passive:false});
   pad.addEventListener('touchmove',e=>each(e,moved),{passive:false});
   pad.addEventListener('touchend',e=>each(e,(id,x,y,t)=>lifted(id,t)),{passive:false});
@@ -1193,7 +1207,7 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
   // Merely passing over it does nothing.
   const mouse=e=>e.pointerType!=='touch';let active=false,last=null;
   const setActive=on=>{active=on;last=null;pad.classList.toggle('active',on)};
-  pad.addEventListener('pointerdown',e=>{if(!mouse(e))return;e.preventDefault();
+  pad.addEventListener('pointerdown',e=>{if(!mouse(e)||onButton(e.target))return;e.preventDefault();
     // A mouse's right or middle button clicks that button on the device.
     if(e.button===1||e.button===2){send({action:'click',button:e.button===2?'right':'middle'});return}
     try{pad.setPointerCapture(e.pointerId)}catch{}down('m',e.clientX,e.clientY,e.timeStamp)});
@@ -1211,6 +1225,24 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
   pad.addEventListener('wheel',e=>{e.preventDefault();
     const perStep=e.deltaMode===1?3:e.deltaMode===2?0.1:100;  // lines, pages, or pixels per step
     scroll.x+=e.deltaX/perStep;scroll.y+=e.deltaY/perStep;later()},{passive:false});
+  // Mouse buttons (Settings → Mouse buttons): each holds its button on the device
+  // while pressed, so a tap clicks and holding one while another finger moves
+  // drags. With a mouse, moving it while holding one drags too.
+  const buttonsDown=new Map();  // pointer id -> {b, name, x, y}
+  const releaseButton=id=>{const p=buttonsDown.get(id);if(!p)return;buttonsDown.delete(id);
+    p.b.classList.remove('pressed');now();send({action:'release',button:p.name})};
+  pad.querySelectorAll('.tp-btn').forEach(b=>{
+    b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(buttonsDown.has(e.pointerId))return;
+      try{b.setPointerCapture(e.pointerId)}catch{}now();
+      buttonsDown.set(e.pointerId,{b,name:b.dataset.button,x:e.clientX,y:e.clientY});b.classList.add('pressed');
+      send({action:'press',button:b.dataset.button});navigator.vibrate?.(8)});
+    b.addEventListener('pointermove',e=>{const p=buttonsDown.get(e.pointerId);if(!p||!mouse(e))return;
+      move.x+=(e.clientX-p.x)*1.5;move.y+=(e.clientY-p.y)*1.5;p.x=e.clientX;p.y=e.clientY;later()});
+    ['pointerup','pointercancel','lostpointercapture'].forEach(n=>b.addEventListener(n,e=>releaseButton(e.pointerId)));
+  });
+  const releaseAll=()=>{for(const id of [...buttonsDown.keys()])releaseButton(id)};  // never leave a button held
+  addEventListener('pagehide',releaseAll);addEventListener('blur',releaseAll);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll()});
   pad.addEventListener('contextmenu',e=>e.preventDefault());
 })();
 
@@ -1283,7 +1315,7 @@ document.querySelectorAll('#toggleKey,[data-reveal]').forEach(b=>b.addEventListe
 // Settings this browser keeps; everything else comes from the server on each load.
 // Kept per browser. Account preferences (touchpad) are on the server and shared by all browsers.
 const USER_PREFS=['liveTyping','language','afterText','pace'];
-const ACCOUNT_PREFS=['touchpad','functionKeys','reverseScroll','bestAddress'];
+const ACCOUNT_PREFS=['touchpad','functionKeys','reverseScroll','bestAddress','mouseButtons'];
 function userPrefs(o){return Object.fromEntries(USER_PREFS.filter(k=>k in o).map(k=>[k,o[k]]))}
 async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-store'});if(!r.ok)throw new Error(r.status);const serverCfg=await r.json();cfg=serverCfg;if(BACKEND_MODE){try{const saved=userPrefs(JSON.parse(localStorage.getItem('voice-keyboard-settings')||'{}'));/* only the user's own preferences; server facts (variant, CA, model) always come from the server */cfg={...serverCfg,...saved,serverUrl:location.origin}}catch{}}const translating=cfg.variant==='translate';$('#languageField').hidden=translating;$('.translate-note').hidden=!translating;renderAddresses()}
 
