@@ -284,6 +284,7 @@ let registered = null;    // this board's entry in the account's clients
 let firmware = {chips: {}};
 let typedPass = null;      // the Wi-Fi password typed on this visit; kept only in memory
 let secureNetworks = {};   // from the last scan: name → needs a password
+let testing = false;       // a test sentence is being typed
 $('#server').value = location.origin;
 
 // ---------- Log ----------
@@ -753,7 +754,7 @@ function renderStatus(s) {
                starting: ['wait', 'BT…', 'Bluetooth: starting']}[s.ble] || ['', s.ble, s.ble];
   pill('#stBle', ...ble);
   $('#makeActive').hidden = !(s.server === 'connected' && !s.selected && s.device);
-  $('#testType').disabled = s.ble !== 'connected';
+  $('#testType').disabled = s.ble !== 'connected' || testing;
   $('#testType').textContent = s.ble === 'connected' ? 'Type a test' : 'Waiting for a paired device…';
 }
 
@@ -771,7 +772,19 @@ $('#tools').onclick = e => { if (e.target === $('#tools')) $('#tools').close(); 
 $('#scan').onclick = scan;
 $('#install').onclick = () => install(true);
 $('#applyOnly').onclick = () => install(false);
-$('#testType').onclick = () => link?.request({cmd: 'type', text: 'Hello from Voice Keyboard! '}).catch(e => stage(e.message, true));
+// If the board is paired with this very computer, the test is typed into this
+// page: a focused button would take each typed space as another click.
+$('#testType').onclick = async () => {
+  const button = $('#testType');
+  button.blur();
+  testing = true;
+  button.disabled = true;
+  try { await link?.request({cmd: 'type', text: 'Hello from Voice Keyboard! '}); }
+  catch (e) { stage(e.message, true); }
+  await sleep(2000);  // about how long typing it takes
+  testing = false;
+  button.disabled = boardStatus?.ble !== 'connected';
+};
 $('#makeActive').onclick = async () => {
   try { await api(`/api/devices/${boardStatus.device}/select`, {method: 'POST'}); link?.send({cmd: 'status'}); }
   catch (e) { stage(e.message, true); }

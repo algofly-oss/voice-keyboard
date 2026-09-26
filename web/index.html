@@ -248,6 +248,7 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .device-pick .text.editing{gap:6px}
 .device-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--subtle)}
 .device-dot.on{background:var(--success);box-shadow:0 0 0 3px var(--success-soft)}
+.device-dot.wait{background:var(--warning);box-shadow:0 0 0 3px rgba(240,178,50,.16)}  /* online, no Bluetooth device */
 .device-tag{flex:none;font-size:11px;font-weight:700;color:#a5adff;background:var(--accent-soft);padding:2px 7px;border-radius:999px}
 .device .icon-mini{flex:none;width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
 .device .icon-mini svg.i{width:16px;height:16px}
@@ -524,8 +525,12 @@ async function pollDevice(){
   try{deviceStatus=await (await fetch('/api/status',{cache:'no-store'})).json()}catch{return}
   if(!deviceStatus.devices)return;
   const sel=deviceStatus.selected;
-  setChip($('#desktopChip'),sel?.online?'ok':sel?'wait':'bad',sel?sel.name:'No client',
-    sel?`Typing on ${sel.name} (${sel.online?'online':'offline'})`:'No client selected. Add one in Settings → Clients');
+  // An ESP32 board is only ready when a computer is connected to it over Bluetooth.
+  const ready=sel?.online&&sel.bluetooth!=='waiting';
+  setChip($('#desktopChip'),ready?'ok':sel?'wait':'bad',sel?sel.name:'No client',
+    !sel?'No client selected. Add one in Settings → Clients'
+    :sel.online&&sel.bluetooth==='waiting'?`${sel.name} is online, but no device is connected to it over Bluetooth`
+    :`Typing on ${sel.name} (${sel.online?'online':'offline'}${sel.bluetooth==='connected'?', Bluetooth connected':''})`);
   renderDevices(deviceStatus.devices);lockKeys(!sel?.online);
 }
 async function checkServer(url){
@@ -869,8 +874,8 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     if(!devices.length){list.replaceChildren(Object.assign(document.createElement('li'),{className:'empty',textContent:'No client yet. Install one below.'}));}
     else list.replaceChildren(...devices.map(d=>{
       const li=document.createElement('li');li.className='device';
-      const seen=d.online?'Online':d.lastSeen?'Last seen '+new Date(d.lastSeen*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'Never connected';
-      li.innerHTML=`<div class="device-pick" role="button" tabindex="0" aria-pressed="${d.selected}" aria-label="Make this the active client"><span class="device-dot${d.online?' on':''}"></span>`+
+      const seen=d.online?(d.bluetooth==='connected'?'Online · Bluetooth connected':d.bluetooth==='waiting'?'Online · no Bluetooth device':'Online'):d.lastSeen?'Last seen '+new Date(d.lastSeen*1000).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'Never connected';
+      li.innerHTML=`<div class="device-pick" role="button" tabindex="0" aria-pressed="${d.selected}" aria-label="Make this the active client"><span class="device-dot${d.online?(d.bluetooth==='waiting'?' wait':' on'):''}"></span>`+
         `<span class="text"><span class="title"></span><span class="hint"></span></span>${d.selected?'<span class="device-tag">Active</span>':''}</div>`+
         `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename or describe">${svg('edit')}</button>`+
         `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;

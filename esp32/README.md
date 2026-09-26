@@ -43,7 +43,16 @@ lines starting with `@vk ` (everything else is log output):
 {"cmd":"forget_bt"} {"cmd":"erase"} {"cmd":"reboot"}
 ```
 
-A `status` event is also sent on every change. The Wi-Fi password and the
+A `status` event is also sent on every change.
+
+To the server, besides the desktop client's protocol, the board sends
+`{"type":"status","bluetooth":"connected"|"waiting"}` whenever a computer
+connects or disconnects over Bluetooth. Settings → Clients shows it
+("Online · no Bluetooth device"), and so does the status icon on the main screen.
+
+Typing runs as fast as the Bluetooth link allows, about 600–800 characters per
+second: one report per character, a release only between repeats of the same key,
+and a 7.5–15 ms connection interval requested from the host. The Wi-Fi password and the
 token are never sent back. `token` is the account's install token. After the
 first connection the board stores the device credential the server issues,
 like the desktop client does. `ca` is the PEM of Caddy's local CA

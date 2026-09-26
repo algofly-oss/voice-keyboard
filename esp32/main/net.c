@@ -48,6 +48,7 @@ typedef enum {
     EV_REJECTED,     // install token or credential no longer valid
     EV_TLS_FAILED,
     EV_ROAM_CHECK,
+    EV_BLE,          // Bluetooth connected or lost: tell the server
 } net_event_t;
 
 static QueueHandle_t events;
@@ -58,6 +59,7 @@ static volatile bool wifi_up, scanning;
 static int wifi_failures;
 static bool use_ca = true;  // with a saved CA, try it first; fall back to public CAs
 static char machine[32];
+static volatile bool ready;  // the server accepted us ("ready"); status messages may go out
 
 // Received message being reassembled from frames.
 static char *message;
@@ -65,7 +67,25 @@ static size_t message_len;
 
 static void post(net_event_t ev)
 {
-    xQueueSend(events, &ev, 0);
+    if (events) {  // Bluetooth starts before the network
+        xQueueSend(events, &ev, 0);
+    }
+}
+
+void net_ble_changed(void)
+{
+    post(EV_BLE);
+}
+
+static void send_ble_status(void)
+{
+    if (!ws || !ready || !esp_websocket_client_is_connected(ws)) {
+        return;
+    }
+    char text[64];
+    int n = snprintf(text, sizeof text, "{\"type\":\"status\",\"bluetooth\":\"%s\"}",
+                     status_ble_connected() ? "connected" : "waiting");
+    esp_websocket_client_send_text(ws, text, n, pdMS_TO_TICKS(2000));
 }
 
 const char *vk_machine_id(void)
@@ -318,11 +338,15 @@ static void handle_message(const char *text)
         vk_status_t *s = status_begin();
         s->selected = cJSON_IsTrue(cJSON_GetObjectItem(m, "selected"));
         if (strcmp(type, "ready") == 0) {
+            ready = true;
             s->server = "connected";
             s->server_error[0] = '\0';
             s->device_id = (int)cJSON_GetNumberValue(cJSON_GetObjectItem(m, "device"));
         }
         status_end();
+        if (strcmp(type, "ready") == 0) {
+            post(EV_BLE);
+        }
         const char *credential = cJSON_GetStringValue(cJSON_GetObjectItem(m, "credential"));
         if (credential && credential[0] && strcmp(credential, vk_cfg.token) != 0 &&
             strlen(credential) <= VK_TOKEN_MAX) {
@@ -388,6 +412,7 @@ static void on_ws(void *arg, esp_event_base_t base, int32_t id, void *data)
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
     case WEBSOCKET_EVENT_ERROR: {
+        ready = false;
         char why[64] = "could not reach the server";
         bool tls = false;
         if (e && e->error_handle.esp_tls_cert_verify_flags) {
@@ -417,6 +442,7 @@ static void on_ws(void *arg, esp_event_base_t base, int32_t id, void *data)
 
 static void ws_stop(void)
 {
+    ready = false;
     if (ws) {
         esp_websocket_client_stop(ws);
         esp_websocket_client_destroy(ws);
@@ -537,6 +563,9 @@ static void net_task(void *arg)
             break;
         case EV_ROAM_CHECK:
             roam_check();
+            break;
+        case EV_BLE:
+            send_ble_status();
             break;
         case EV_TLS_FAILED:
             if (vk_cfg.ca) {

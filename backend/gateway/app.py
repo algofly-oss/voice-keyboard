@@ -475,6 +475,8 @@ def device_json(device, room: "Room", selected_id) -> dict:
     return {"id": device["id"], "name": device["name"], "description": device["description"],
             "platform": device["platform"], "version": device["version"], "mac": device_mac(device["machine_id"]),
             "online": device["id"] in room.devices,
+            # ESP32 boards report whether a computer is connected over Bluetooth; null for others.
+            "bluetooth": room.bluetooth.get(device["id"]) if device["id"] in room.devices else None,
             "selected": device["id"] == selected_id, "lastSeen": device["last_seen"]}
 
 
@@ -725,6 +727,7 @@ async def keyboard(ws: WebSocket):
     server -> {"type":"ready","device":7,"client":"<name>","credential":"…","selected":true}
     server -> {"type":"selected","selected":false}      when the user picks another computer
     server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
+    client -> {"type":"status","bluetooth":"connected"|"waiting"}   ESP32 boards, on every change
     The token is the account's install token (first pairing), the device's
     credential, or a credential issued before accounts existed.
     """
@@ -780,6 +783,9 @@ async def keyboard(ws: WebSocket):
                 data = json.loads(message["text"])
                 if data.get("type") == "ping":
                     await ws.send_json({"type": "pong"})
+                elif data.get("type") == "status" and data.get("bluetooth") in ("connected", "waiting"):
+                    room.bluetooth[device["id"]] = data["bluetooth"]
+                    room.broadcast({"type": "devices"})
     except (WebSocketDisconnect, ValueError, KeyError):
         pass
     finally:
@@ -787,6 +793,7 @@ async def keyboard(ws: WebSocket):
             for room in rooms.values():
                 if room.devices.get(device["id"]) is ws:
                     room.devices.pop(device["id"], None)
+                    room.bluetooth.pop(device["id"], None)
                     room.broadcast({"type": "devices"})
             store.update_device(device["id"], last_seen=int(time.time()))
 
@@ -797,6 +804,7 @@ class Room:
     def __init__(self):
         self.watchers: set[WebSocket] = set()
         self.devices: dict[int, WebSocket] = {}  # device id -> connected desktop client
+        self.bluetooth: dict[int, str] = {}       # device id -> "connected" / "waiting" (ESP32 boards)
         self.selected: int | None = None          # the device that types
         self.pending: list[tuple[float, dict]] = []  # typed while the selected device was offline
         self.active: dict | None = None  # owner, started, live, ws, joiner

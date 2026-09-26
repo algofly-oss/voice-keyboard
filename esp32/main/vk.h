@@ -56,12 +56,14 @@ typedef struct {
 vk_status_t *status_begin(void);  // locks the status for a change ...
 void status_end(void);            // ... then unlocks and pushes it to the page
 void status_emit(void);
+bool status_ble_connected(void);
 
 // Wi-Fi and the backend connection.
 void net_start(void);
 void net_apply(bool wifi_changed, bool server_changed);  // after the settings change
 cJSON *net_scan(void);                                   // array of {ssid, rssi, secure}
 const char *vk_machine_id(void);
+void net_ble_changed(void);  // tells the server whether a computer is connected over Bluetooth
 
 // Bluetooth LE keyboard.
 void ble_start(void);

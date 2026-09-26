@@ -59,9 +59,23 @@ static cJSON *status_json_locked(void)
 
 void status_end(void)
 {
+    static bool reported;  // Bluetooth connected, as last told to the server
     cJSON *s = status_json_locked();
+    bool ble = strcmp(status.ble, "connected") == 0, changed = ble != reported;
+    reported = ble;
     xSemaphoreGive(status_lock);
     io_event(s);
+    if (changed) {
+        net_ble_changed();
+    }
+}
+
+bool status_ble_connected(void)
+{
+    xSemaphoreTake(status_lock, portMAX_DELAY);
+    bool connected = strcmp(status.ble, "connected") == 0;
+    xSemaphoreGive(status_lock);
+    return connected;
 }
 
 void status_emit(void)

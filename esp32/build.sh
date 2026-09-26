@@ -20,7 +20,8 @@ for chip in "${CHIPS[@]}"; do
       set -e
       # set-target only on the first build: it wipes the build folder.
       [ -f build/$chip/sdkconfig ] || idf.py -B build/$chip -D SDKCONFIG=build/$chip/sdkconfig set-target $chip >/dev/null
-      idf.py -B build/$chip -D SDKCONFIG=build/$chip/sdkconfig build
+      # reconfigure: the version is read at configure time, and a quick rebuild would keep the old one
+      idf.py -B build/$chip -D SDKCONFIG=build/$chip/sdkconfig reconfigure build
       cd build/$chip && esptool.py --chip $chip merge_bin -o ../../dist/vkeyboard-$chip.bin @flash_args"
   ls -l "dist/vkeyboard-$chip.bin"
 done

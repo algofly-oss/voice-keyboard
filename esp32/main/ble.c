@@ -10,6 +10,7 @@
 #include "esp_bt.h"
 #include "esp_hidd.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_nimble_hci.h"
 #include "host/ble_hs.h"
 #include "host/ble_store.h"
@@ -21,7 +22,8 @@
 
 static const char *TAG = "ble";
 
-#define KEY_DELAY_MS 10       // between reports; the host polls every 7.5–15 ms
+#define RETRY_MS 2            // when the stack's buffers are full
+#define RETRY_LIMIT 1000      // ~2 s, then the report is dropped
 #define REPORT_ID 1
 #define APPEARANCE_KEYBOARD 0x03C1
 
@@ -116,13 +118,21 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             struct ble_store_value_sec bond;
             bool bonded = ble_store_read_peer_sec(&key, &bond) == 0;
             ESP_LOGI(TAG, "connection from %s computer", bonded ? "a paired" : "a new");
+            connected = true;
+            vk_status_t *s = status_begin();
+            s->ble = "connected";
+            status_end();
             if (bonded) {
                 ble_gap_security_initiate(event->connect.conn_handle);
             }
         }
         return 0;
     case BLE_GAP_EVENT_DISCONNECT:
+        // Here, not from esp_hidd's events: those come from another task, and a
+        // late one from a failed attempt could undo a newer connection.
         ESP_LOGI(TAG, "disconnected, reason 0x%x", event->disconnect.reason);
+        connected = false;
+        advertise();
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         ESP_LOGI(TAG, "encryption %s (%d)", event->enc_change.status == 0 ? "on" : "failed", event->enc_change.status);
@@ -133,6 +143,17 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             snprintf(s->ble_peer, sizeof s->ble_peer, "%02X:%02X:%02X:%02X:%02X:%02X",
                      a[5], a[4], a[3], a[2], a[1], a[0]);
             status_end();
+            // Ask for the shortest connection interval the host allows
+            // (7.5 ms; Apple devices take 15 ms): it sets the typing speed.
+            struct ble_gap_upd_params fast = {
+                .itvl_min = 6, .itvl_max = 12, .latency = 0, .supervision_timeout = 400,
+            };
+            ble_gap_update_params(event->enc_change.conn_handle, &fast);
+        }
+        return 0;
+    case BLE_GAP_EVENT_CONN_UPDATE:
+        if (ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
+            ESP_LOGI(TAG, "connection interval %d.%02d ms", desc.conn_itvl * 125 / 100, desc.conn_itvl * 125 % 100);
         }
         return 0;
     case BLE_GAP_EVENT_REPEAT_PAIRING:
@@ -154,18 +175,11 @@ static void hid_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     case ESP_HIDD_START_EVENT:
         advertise();
         break;
-    case ESP_HIDD_CONNECT_EVENT: {
-        connected = true;
-        vk_status_t *s = status_begin();
-        s->ble = "connected";
-        status_end();
-        ESP_LOGI(TAG, "computer connected");
+    case ESP_HIDD_CONNECT_EVENT:  // the connection state comes from gap_event
+        ESP_LOGD(TAG, "HID connected");
         break;
-    }
     case ESP_HIDD_DISCONNECT_EVENT:
-        connected = false;
-        ESP_LOGI(TAG, "computer disconnected");
-        advertise();
+        ESP_LOGD(TAG, "HID disconnected");
         break;
     default:
         break;
@@ -189,19 +203,22 @@ typedef struct {
 static QueueHandle_t jobs;
 static uint8_t held;  // a key kept down by "down"/"hold" until "up"
 
+// As fast as the link takes them: no fixed delay, only waiting while the
+// stack's buffers are full. Notifications arrive in order, and every report
+// reaches the host.
 static void send_report(uint8_t mod, uint8_t code)
 {
     uint8_t report[8] = {mod, 0, code, 0, 0, 0, 0, 0};
-    for (int attempt = 0; attempt < 20; attempt++) {
+    for (int attempt = 0; attempt < RETRY_LIMIT; attempt++) {
         if (!connected) {
             return;
         }
         if (esp_hidd_dev_input_set(hid, 0, REPORT_ID, report, sizeof report) == ESP_OK) {
-            break;
+            return;
         }
-        vTaskDelay(pdMS_TO_TICKS(20));  // the stack's buffers are full; let them drain
+        vTaskDelay(pdMS_TO_TICKS(RETRY_MS));
     }
-    vTaskDelay(pdMS_TO_TICKS(KEY_DELAY_MS));
+    ESP_LOGW(TAG, "report dropped: the link is stalled");
 }
 
 static void stroke(uint8_t mod, uint8_t code)
@@ -230,9 +247,15 @@ static int utf8_next(const char *s, uint32_t *cp)
     return len;
 }
 
+// One report per character: going from one key straight to the next releases
+// the first. A release report is only needed between two presses of the same
+// key ("ll"), and a Shift change gets its own report first, so a capital
+// letter can never come out lower-case.
 static void type_text(const char *text)
 {
     int typed = 0, skipped = 0;
+    uint8_t cur_mod = 0, cur_code = 0;  // what the host sees pressed
+    int64_t start = esp_timer_get_time();
     for (const char *p = text; *p;) {
         uint32_t cp;
         p += utf8_next(p, &cp);
@@ -243,15 +266,29 @@ static void type_text(const char *text)
             continue;
         }
         for (int i = 0; i < n; i++) {
-            stroke(strokes[i].mod, strokes[i].code);
+            uint8_t mod = strokes[i].mod, code = strokes[i].code;
+            if (held) {  // a key held with "down": keep the old press-and-release
+                stroke(mod, code);
+                continue;
+            }
+            if (code == cur_code || mod != cur_mod) {
+                send_report(mod, 0);
+            }
+            send_report(mod, code);
+            cur_mod = mod;
+            cur_code = code;
         }
         typed++;
     }
+    if (cur_code || cur_mod) {
+        send_report(0, held);
+    }
+    int ms = (int)((esp_timer_get_time() - start) / 1000);
     // Only counts are logged: dictated text can contain passwords.
     if (skipped) {
-        ESP_LOGW(TAG, "typed %d characters; %d have no key on a US keyboard", typed, skipped);
+        ESP_LOGW(TAG, "typed %d characters in %d ms; %d have no key on a US keyboard", typed, ms, skipped);
     } else {
-        ESP_LOGI(TAG, "typed %d characters", typed);
+        ESP_LOGI(TAG, "typed %d characters in %d ms", typed, ms);
     }
 }
 
