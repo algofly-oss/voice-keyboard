@@ -635,6 +635,14 @@ async def device_pairing(device_id: int, request: Request):
     return {"ok": True, "seconds": 120}
 
 
+@app.post("/api/devices/{device_id}/forget-bluetooth")
+async def device_forget_bluetooth(device_id: int, request: Request):
+    """ESP32: forget every device paired over Bluetooth; each has to pair again."""
+    user = require_user(request)
+    await esp32_socket(user, device_id).send_json({"type": "forget"})
+    return {"ok": True}
+
+
 @app.post("/api/devices/{device_id}/logs")
 async def device_logs(device_id: int, request: Request):
     """ESP32: ?on=1 streams its log lines to the web app (as device-log events) for up to 10 minutes; ?on=0 stops."""
@@ -950,6 +958,7 @@ async def keyboard(ws: WebSocket):
     client -> {"type":"log","level":"info","message":"…"}    ESP32, while its live log is open: relayed, not stored
     server -> {"type":"pairing","seconds":120}   ESP32: drop the connection and refuse paired devices until a new one pairs
     server -> {"type":"logs","on":true}          ESP32: stream all log lines (10 minutes at most)
+    server -> {"type":"forget"}                  ESP32: forget every paired Bluetooth device
     The token is the account's install token (first pairing), the device's
     credential, or a credential issued before accounts existed.
     """

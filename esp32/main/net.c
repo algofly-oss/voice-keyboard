@@ -426,6 +426,9 @@ static void handle_message(const char *text)
         if (key) {
             ble_key(key, state ? state : "press");
         }
+    } else if (strcmp(type, "forget") == 0) {  // forget every paired device (they must pair again)
+        ESP_LOGI(TAG, "forgetting all paired devices");
+        ble_forget();
     } else if (strcmp(type, "pairing") == 0) {
         int seconds = (int)cJSON_GetNumberValue(cJSON_GetObjectItem(m, "seconds"));
         ble_pairing_mode(seconds >= 10 && seconds <= 600 ? seconds : 120);

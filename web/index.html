@@ -232,10 +232,17 @@ details .inner{display:flex;flex-direction:column;gap:18px;padding:4px 14px 16px
 .ask-box{display:flex;flex-direction:column;gap:10px;padding:20px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border-soft);box-shadow:var(--shadow)}
 .ask h2{margin:0;font-size:17px;font-weight:650}
 .ask p{margin:0;color:var(--muted);font-size:14px;line-height:1.45}
-.board-panel{width:min(520px,calc(100vw - 32px))}
-.board-head{display:flex;align-items:center;gap:8px}.board-head h2{flex:1}
-.board-head .icon-mini{width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
-.board-panel .btn{display:flex;align-items:center;justify-content:center;gap:8px}
+.client-panel{width:min(520px,calc(100vw - 32px))}
+.client-panel .ask-box{max-height:calc(100dvh - 48px);overflow-y:auto;gap:12px}
+.cp-head{display:flex;align-items:center;gap:10px}.cp-head h2{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-head .icon-mini{flex:none;width:34px;height:34px;border:0;border-radius:var(--radius-sm);background:none;color:var(--muted);display:grid;place-items:center}
+.cp-fields{display:flex;flex-direction:column;gap:8px}
+.cp-row{display:flex;gap:8px}.cp-row>.btn{flex:1}
+.client-panel .btn{display:flex;align-items:center;justify-content:center;gap:8px}
+.cp-board{display:flex;flex-direction:column;gap:10px;padding-top:12px;border-top:1px solid var(--border-soft)}
+.cp-label{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.cp-bt{margin:0;font-size:14px;color:var(--text)}
+.cp-remove{color:#ff8a8d!important}
 .board-log-head{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:13px;font-weight:600;color:var(--muted)}
 .board-log{margin:0;height:min(40vh,300px);overflow:auto;padding:8px 10px;border-radius:var(--radius-sm);background:#111214;border:1px solid var(--border);
   font:11.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c9cdd3;white-space:pre-wrap;word-break:break-word}
@@ -461,14 +468,29 @@ html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),
 
 <div class="toast" id="toast" role="alert" aria-live="assertive"><i data-i="check"></i><span class="msg"></span></div>
 
-<dialog class="ask board-panel" id="boardPanel" aria-labelledby="boardTitle">
+<dialog class="ask client-panel" id="clientPanel" aria-labelledby="cpTitle">
   <div class="ask-box">
-    <div class="board-head"><h2 id="boardTitle">ESP32</h2><button type="button" class="icon-mini" id="boardClose" aria-label="Close"><i data-i="x"></i></button></div>
-    <p id="boardState">…</p>
-    <button type="button" class="btn primary" id="boardPair"><i data-i="bluetooth"></i><span>Pairing mode</span></button>
-    <p class="hint">For 2 minutes the board drops its connection and ignores the devices it knows, so a new one can find it: open Bluetooth there and pick it.</p>
-    <div class="board-log-head"><span>Live log</span><span class="hint" id="boardLogState">connecting…</span></div>
-    <pre class="board-log" id="boardLog" aria-live="off"></pre>
+    <div class="cp-head"><span class="os" id="cpIcon"></span><h2 id="cpTitle">Client</h2>
+      <button type="button" class="icon-mini" id="cpClose" aria-label="Close"><i data-i="x"></i></button></div>
+    <p class="hint" id="cpInfo"></p>
+    <div class="cp-fields">
+      <input id="cpName" type="text" maxlength="80" aria-label="Name" placeholder="Name">
+      <input id="cpDesc" type="text" maxlength="200" aria-label="Description" placeholder="Description (optional)">
+    </div>
+    <div class="cp-row"><button type="button" class="btn secondary" id="cpSave">Save name</button>
+      <button type="button" class="btn secondary" id="cpUpdate" hidden>Update</button></div>
+    <section class="cp-board" id="cpBoard" hidden>
+      <div class="cp-label">Bluetooth</div>
+      <p class="cp-bt" id="cpBt"></p>
+      <button type="button" class="btn primary" id="cpPair"><i data-i="bluetooth"></i><span>Pairing mode</span></button>
+      <div class="cp-row">
+        <button type="button" class="btn secondary" id="cpBtToggle">Turn off</button>
+        <button type="button" class="btn secondary" id="cpForget">Forget paired devices</button>
+      </div>
+      <div class="board-log-head"><span>Live log</span><span class="hint" id="cpLogState"></span></div>
+      <pre class="board-log" id="cpLog" aria-live="off"></pre>
+    </section>
+    <button type="button" class="btn secondary cp-remove" id="cpRemove">Remove this client</button>
   </div>
 </dialog>
 <dialog class="ask" id="ask" aria-labelledby="askTitle" aria-describedby="askText">
@@ -606,6 +628,7 @@ const ICONS={
   edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  more:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   shift:'<path d="M9 20v-6H4l8-10 8 10h-5v6z"/>',
   caps:'<path d="M9 16v-4H4l8-9 8 9h-5v4zM8 21h8"/>',
   monitor:'<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
@@ -659,7 +682,7 @@ function setState(next){
 
 // ---------- Device and server status ----------
 // An ESP32's Bluetooth keyboard, off so a tablet shows its own on-screen keyboard.
-async function setBluetooth(on){const sel=deviceStatus.selected;if(!sel)return;
+async function setBluetooth(on,sel=deviceStatus.selected){if(!sel)return;
   sel.bluetooth=on?'waiting':'off';
   const r=await fetch(`/api/devices/${sel.id}/bluetooth?on=${on?1:0}`,{method:'POST'}).catch(()=>null);
   if(!r?.ok){toast('Could not reach the board',{error:true});return}
@@ -1243,7 +1266,6 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     }catch(error){$('#installCommand').textContent='Could not load the install command.';toast(error.message,{error:true})}
     finally{button.disabled=false;renderInstall()}
   }
-  let renaming=null;  // id of the client whose name is being edited; pauses re-rendering
   // Platform logos: Simple Icons (CC0), and the Windows mark drawn as four panes.
   const LOGOS={
     mac:'<path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>',
@@ -1265,40 +1287,74 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
     return s<90?'just now':s<3600?`${Math.round(s/60)} min ago`:s<86400?`${Math.round(s/3600)} h ago`
       :s<7*86400?`${Math.round(s/86400)} d ago`:new Date(t*1000).toLocaleDateString([],{dateStyle:'medium'});
   }
-  // ---- ESP32 board panel: pairing mode and a live log ----
-  let board=null,pairingUntil=0,pairTimer=0;  // the open board's id
-  const boardLog=$('#boardLog');
-  window.boardLine=(m)=>{if(m.device!==board)return;
-    const atEnd=boardLog.scrollTop+boardLog.clientHeight>=boardLog.scrollHeight-8;
+  // ---- Client options panel (the ⋯ of a row); ESP32 boards add Bluetooth and a live log ----
+  let cp=null,pairingUntil=0,pairTimer=0;  // the open client's id
+  const cpLog=$('#cpLog'),panelDevice=()=>deviceStatus.devices?.find(x=>x.id===cp);
+  const isEsp=d=>/^esp32/i.test(d?.platform||'');
+  window.boardLine=m=>{if(m.device!==cp)return;
+    const atEnd=cpLog.scrollTop+cpLog.clientHeight>=cpLog.scrollHeight-8;
     const line=Object.assign(document.createElement('div'),{textContent:m.line.replace(/^[0-9.\-a-z]+ ESP32(-C3)?: /,'')});
     if(m.level==='error')line.className='err';
-    boardLog.append(line);while(boardLog.childElementCount>400)boardLog.firstChild.remove();
-    if(atEnd)boardLog.scrollTop=boardLog.scrollHeight;$('#boardLogState').textContent='live'};
-  function renderBoard(){if(board===null)return;const d=deviceStatus.devices?.find(x=>x.id===board);if(!d)return;
-    $('#boardTitle').textContent=d.name;
+    cpLog.append(line);while(cpLog.childElementCount>400)cpLog.firstChild.remove();
+    if(atEnd)cpLog.scrollTop=cpLog.scrollHeight;$('#cpLogState').textContent='live'};
+  function renderPanel(){if(cp===null)return;const d=panelDevice();if(!d){$('#clientPanel').close();return}
+    const p=platformOf(d),esp=isEsp(d);
+    $('#cpTitle').textContent=d.name;
+    $('#cpIcon').innerHTML=LOGOS[p.kind]?`<svg class="logo" viewBox="0 0 24 24" aria-hidden="true">${LOGOS[p.kind]}</svg>`:svg('monitor');
+    $('#cpInfo').textContent=[p.label,d.version&&'v'+d.version,d.mac,d.online?'online':d.lastSeen?'last seen '+ago(d.lastSeen):'never connected',d.selected&&'active client'].filter(Boolean).join(' · ');
+    $('#cpUpdate').hidden=!d.outdated;$('#cpUpdate').textContent=updating.has(d.id)?'Updating…':`Update to ${d.latest}`;$('#cpUpdate').disabled=updating.has(d.id);
+    $('#cpBoard').hidden=!esp;if(!esp)return;
     const left=Math.max(0,Math.ceil((pairingUntil-Date.now())/1000));
-    $('#boardState').textContent=!d.online?'Offline: it has to be connected to the server.'
-      :d.bluetooth==='pairing'?`Pairing mode${left?` for ${left} s more`:''}: add “${d.name}” in the new device's Bluetooth settings.`
-      :d.bluetooth==='connected'?'Connected to a device over Bluetooth.':d.bluetooth==='off'?'Bluetooth keyboard turned off.'
-      :'Advertising: no device is connected. Devices it knows reconnect by themselves.';
-    $('#boardPair').disabled=!d.online||d.bluetooth==='pairing';
-    $('#boardPair span').textContent=d.bluetooth==='pairing'?`Pairing mode (${left} s)`:'Pairing mode'}
-  window.openBoard=async id=>{board=id;boardLog.textContent='';$('#boardLogState').textContent='connecting…';renderBoard();
-    $('#boardPanel').showModal();
+    $('#cpBt').textContent=!d.online?'The board is offline.'
+      :d.bluetooth==='pairing'?`Pairing mode${left?`, ${left} s left`:''}: add “${d.name}” in the new device's Bluetooth settings.`
+      :d.bluetooth==='connected'?'Connected to a device.':d.bluetooth==='off'?'Turned off: the tablet or phone can use its on-screen keyboard.'
+      :'Waiting: no device is connected. Devices it knows reconnect by themselves; new ones can pair.';
+    $('#cpPair').disabled=!d.online||d.bluetooth==='pairing';
+    $('#cpPair span').textContent=d.bluetooth==='pairing'?`Pairing mode (${left} s)`:'Pairing mode';
+    $('#cpBtToggle').textContent=d.bluetooth==='off'?'Turn on':'Turn off';
+    for(const b of ['#cpBtToggle','#cpForget'])$(b).disabled=!d.online}
+  window.openClient=async id=>{cp=id;const d=panelDevice();if(!d)return;
+    $('#cpName').value=d.name;$('#cpDesc').value=d.description||'';
+    cpLog.textContent='';renderPanel();$('#clientPanel').showModal();
+    if(!isEsp(d))return;
+    $('#cpLogState').textContent=d.online?'connecting…':'offline';
+    if(!d.online)return;
     const r=await fetch(`/api/devices/${id}/logs?on=1`,{method:'POST'});
-    if(!r.ok)$('#boardLogState').textContent=(await r.json().catch(()=>({}))).detail||'not available';
-    else $('#boardLogState').textContent='waiting for lines…'};
-  const closeBoard=()=>{if(board===null)return;fetch(`/api/devices/${board}/logs?on=0`,{method:'POST'}).catch(()=>{});board=null;clearInterval(pairTimer)};
-  $('#boardPanel').addEventListener('close',closeBoard);
-  $('#boardClose').addEventListener('click',()=>$('#boardPanel').close());
-  $('#boardPair').addEventListener('click',async()=>{const r=await fetch(`/api/devices/${board}/pairing`,{method:'POST'});
-    if(!r.ok){toast((await r.json().catch(()=>({}))).detail||'Could not reach the board',{error:true});return}
-    pairingUntil=Date.now()+(await r.json()).seconds*1000;clearInterval(pairTimer);pairTimer=setInterval(renderBoard,1000);
-    toast('Pairing mode: pick the board in the new device\'s Bluetooth settings');pollDevice()});
-  window.renderBoard=renderBoard;
+    $('#cpLogState').textContent=r.ok?'waiting for lines…':(await r.json().catch(()=>({}))).detail||'not available'};
+  $('#clientPanel').addEventListener('close',()=>{if(cp===null)return;
+    if(isEsp(panelDevice()))fetch(`/api/devices/${cp}/logs?on=0`,{method:'POST'}).catch(()=>{});
+    cp=null;clearInterval(pairTimer)});
+  $('#cpClose').addEventListener('click',()=>$('#clientPanel').close());
+  const post=async(url,okText)=>{const r=await fetch(url,{method:'POST'});
+    if(!r.ok){toast((await r.json().catch(()=>({}))).detail||'Could not reach the client',{error:true});return null}
+    if(okText)toast(okText);pollDevice();return r.json()};
+  $('#cpSave').addEventListener('click',()=>{const d=panelDevice(),name=$('#cpName').value.trim(),changes={};
+    if(!name)return toast('The name cannot be empty',{error:true});
+    if(name!==d.name)changes.name=name;if($('#cpDesc').value.trim()!==(d.description||''))changes.description=$('#cpDesc').value.trim();
+    if(!Object.keys(changes).length)return toast('Nothing to change');
+    deviceAction('PATCH',`/api/devices/${d.id}`,changes).then(()=>toast('Saved'))});
+  $('#cpUpdate').addEventListener('click',()=>startUpdate(panelDevice()));
+  $('#cpPair').addEventListener('click',async()=>{const r=await post(`/api/devices/${cp}/pairing`,'Pairing mode: pick the board in the new device\'s Bluetooth settings');
+    if(r){pairingUntil=Date.now()+r.seconds*1000;clearInterval(pairTimer);pairTimer=setInterval(renderPanel,1000)}});
+  $('#cpBtToggle').addEventListener('click',()=>{const d=panelDevice();setBluetooth(d.bluetooth==='off',d)});
+  $('#cpForget').addEventListener('click',async()=>{const d=panelDevice();
+    if(await ask(`Forget every device paired with ${d.name}?`,'Each one has to pair again: remove the board from its Bluetooth settings, then add it again.',{ok:'Forget all',danger:true}))
+      post(`/api/devices/${d.id}/forget-bluetooth`,'Paired devices forgotten; the board is ready for a new one')});
+  $('#cpRemove').addEventListener('click',async()=>{const d=panelDevice();
+    if(await ask(`Remove ${d.name}?`,'It stops typing and has to be set up again to come back.',{ok:'Remove',danger:true})){
+      $('#clientPanel').close();deviceAction('DELETE',`/api/devices/${d.id}`)}});
+  window.renderBoard=renderPanel;
+  // Updating a client: desktop clients update themselves; ESP32 boards from the setup page.
+  function startUpdate(d){
+    if(isEsp(d)){location.href='/esp32';return}
+    if(!d.selfUpdate){$('#clientPanel').close();$('#addComputer').click();toast(`Run this install command on ${d.name} once; from then on it updates itself.`);return}
+    updating.set(d.id,d.version);renderDevices(deviceStatus.devices);renderPanel();
+    fetch(`/api/devices/${d.id}/update`,{method:'POST'}).then(async r=>{
+      if(!r.ok){updating.delete(d.id);toast((await r.json().catch(()=>({}))).detail||'Could not start the update',{error:true});pollDevice();return}
+      toast(`${d.name} is updating to ${d.latest}`);
+      setTimeout(()=>{if(updating.delete(d.id))pollDevice()},120000)})}  // give up waiting after 2 min
   const updating=new Map();  // client id → its version when Update was pressed
   window.renderDevices=devices=>{
-    if(renaming!==null)return;
     for(const d of devices)if(updating.has(d.id)&&updating.get(d.id)!==d.version){updating.delete(d.id);toast(`${d.name} updated to ${d.version}`)}
     const list=$('#deviceList');
     if(!devices.length){list.replaceChildren(Object.assign(document.createElement('li'),{className:'empty',textContent:'No client yet. Add one below.'}));}
@@ -1314,9 +1370,7 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
         `<span class="text"><span class="title-row"><span class="title"></span>${esp?`<span class="bt ${bt}">${svg('bluetooth')}</span>`:''}</span><span class="hint"></span></span>`+
         `${d.outdated?`<button type="button" class="update-btn">${updating.has(d.id)?'Updating…':'Update'}</button>`:''}`+
         `${d.selected?'<span class="device-tag">Active</span>':''}</div>`+
-        `${esp?`<button type="button" class="icon-mini" data-act="board" aria-label="Pairing mode and live log" title="Pairing mode and live log">${svg('activity')}</button>`:''}`+
-        `<button type="button" class="icon-mini" data-act="rename" aria-label="Rename or describe">${svg('edit')}</button>`+
-        `<button type="button" class="icon-mini" data-act="remove" aria-label="Remove">${svg('x')}</button>`;
+        `<button type="button" class="icon-mini" data-act="options" aria-label="Options for ${d.name.replace(/"/g,'&quot;')}" title="Options">${svg('more')}</button>`;
       li.querySelector('.title').textContent=d.name;
       const btText=bt==='on'?'Bluetooth connected':bt==='wait'?'No Bluetooth device':bt==='off'?'Bluetooth off':bt==='pairing'?'Pairing mode':'';
       // Two lines for every client; the rest is in the tooltip.
@@ -1324,47 +1378,15 @@ async function loadSettings(){const r=await fetch('/api/settings',{cache:'no-sto
       // Newer build available: desktop clients update themselves; ESP32 boards from the setup page.
       const upd=li.querySelector('.update-btn');
       if(upd){upd.title=`Update to ${d.latest}`;upd.disabled=updating.has(d.id);
-        upd.onclick=async e=>{e.stopPropagation();
-          if(esp){location.href='/esp32';return}
-          if(!d.selfUpdate){  // too old to update itself: the install command, once
-            $('#addComputer').click();toast(`Run this install command on ${d.name} once; from then on it updates itself.`);return}
-          updating.set(d.id,d.version);upd.disabled=true;upd.textContent='Updating…';
-          const r=await fetch(`/api/devices/${d.id}/update`,{method:'POST'});
-          if(!r.ok){updating.delete(d.id);toast((await r.json().catch(()=>({}))).detail||'Could not start the update',{error:true});pollDevice();return}
-          toast(`${d.name} is updating to ${d.latest}`);
-          setTimeout(()=>{if(updating.delete(d.id))pollDevice()},120000)}}  // give up waiting after 2 min
+        upd.onclick=e=>{e.stopPropagation();startUpdate(d)}}
       li.querySelector('.device-pick').title=[d.name,d.description,p.label,d.version&&'v'+d.version,d.mac,seenAt||status,btText].filter(Boolean).join('\n');
-      const pick=li.querySelector('.device-pick'),select=()=>{if(renaming===null&&!d.selected)deviceAction('POST',`/api/devices/${d.id}/select`)};
+      const pick=li.querySelector('.device-pick'),select=()=>{if(!d.selected)deviceAction('POST',`/api/devices/${d.id}/select`)};
       pick.onclick=select;
       pick.onkeydown=e=>{if(e.target===pick&&(e.key==='Enter'||e.key===' ')){e.preventDefault();select()}};
-      li.querySelector('[data-act=rename]').onclick=()=>renameInline(li,d);
-      li.querySelector('[data-act=board]')?.addEventListener('click',()=>openBoard(d.id));
-      li.querySelector('[data-act=remove]').onclick=async()=>{
-        if(await ask(`Remove ${d.name}?`,'It stops typing and has to be installed again to come back.',{ok:'Remove',danger:true}))deviceAction('DELETE',`/api/devices/${d.id}`)};
+      li.querySelector('[data-act=options]').onclick=()=>openClient(d.id);
       return li}));
     $('#clientCount').textContent=devices.length;$('#clientCount').classList.toggle('on',devices.some(d=>d.online));
   };
-  // Turns the client's name and description into text fields in place: Enter or leaving them saves, Esc cancels.
-  function renameInline(li,d){
-    if(renaming!==null)return;
-    renaming=d.id;
-    const text=li.querySelector('.text'),field=(value,max,label,placeholder)=>{
-      const input=Object.assign(document.createElement('input'),{type:'text',value,maxLength:max,className:'device-name',placeholder});
-      input.setAttribute('aria-label',label);return input};
-    const name=field(d.name,80,'Client name',''),desc=field(d.description||'',200,'Description','Description (optional)');
-    text.replaceChildren(name,desc);text.classList.add('editing');name.focus();name.select();
-    let done=false;
-    const finish=save=>{if(done)return;done=true;renaming=null;
-      const changes={};
-      if(name.value.trim()&&name.value.trim()!==d.name)changes.name=name.value.trim();
-      if(desc.value.trim()!==(d.description||''))changes.description=desc.value.trim();
-      if(save&&Object.keys(changes).length)deviceAction('PATCH',`/api/devices/${d.id}`,changes);else pollDevice()};
-    for(const input of [name,desc]){
-      input.onclick=e=>e.stopPropagation();
-      input.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(true)}else if(e.key==='Escape'){e.preventDefault();finish(false)}};
-      input.onblur=e=>{if(e.relatedTarget!==name&&e.relatedTarget!==desc)finish(true)};
-    }
-  }
   async function deviceAction(method,url,body){
     const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
     if(!r.ok)toast((await r.json().catch(()=>({}))).detail||'Could not update the client',{error:true});

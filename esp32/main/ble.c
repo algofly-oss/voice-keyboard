@@ -81,6 +81,22 @@ static bool pairing(void)
 {
     return pairing_until_us && esp_timer_get_time() < pairing_until_us;
 }
+
+// In pairing mode, a connection that gets encrypted without pairing is a known
+// device reconnecting with its old keys: it is dropped to make room. A device
+// that pairs (new, or pairing again after forgetting the board) is kept; the
+// check waits a moment, as "pairing complete" may follow the encryption event.
+static esp_timer_handle_t reconnect_check;
+static uint16_t check_handle;
+static volatile bool paired_now;
+
+static void reconnect_check_cb(void *arg)
+{
+    if (!paired_now && pairing()) {
+        ESP_LOGI(TAG, "pairing mode: a known device reconnected with its old keys; making room for a new one");
+        ble_gap_terminate(check_handle, BLE_ERR_REM_USER_CONN_TERM);
+    }
+}
 static uint8_t own_addr_type;
 static char name[VK_NAME_MAX + 1] = "Voice Keyboard";
 
@@ -148,16 +164,12 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             struct ble_store_value_sec bond;
             bool bonded = ble_store_read_peer_sec(&key, &bond) == 0;
             ESP_LOGI(TAG, "connection from %s computer", bonded ? "a paired" : "a new");
-            if (bonded && pairing()) {
-                ESP_LOGI(TAG, "pairing mode: refused a device paired before; waiting for a new one");
-                ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-                return 0;
-            }
             connected = true;
+            paired_now = false;
             vk_status_t *s = status_begin();
             s->ble = "connected";
             status_end();
-            if (bonded) {
+            if (bonded && !pairing()) {  // in pairing mode, let the device choose: pair again, or reconnect (dropped)
                 ble_gap_security_initiate(event->connect.conn_handle);
             }
         }
@@ -171,9 +183,10 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         ESP_LOGI(TAG, "encryption %s (%d)", event->enc_change.status == 0 ? "on" : "failed", event->enc_change.status);
-        if (event->enc_change.status == 0 && pairing()) {
-            pairing_until_us = 0;
-            ESP_LOGI(TAG, "pairing mode: a new device paired");
+        if (event->enc_change.status == 0 && pairing() && !paired_now) {
+            check_handle = event->enc_change.conn_handle;
+            esp_timer_stop(reconnect_check);
+            esp_timer_start_once(reconnect_check, 1500 * 1000);
         }
         if (event->enc_change.status == 0 && ble_gap_conn_find(event->enc_change.conn_handle, &desc) == 0) {
             vk_status_t *s = status_begin();
@@ -193,6 +206,17 @@ static int gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_CONN_UPDATE:
         if (ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
             ESP_LOGI(TAG, "connection interval %d.%02d ms", desc.conn_itvl * 125 / 100, desc.conn_itvl * 125 % 100);
+        }
+        return 0;
+    case BLE_GAP_EVENT_PARING_COMPLETE:  // (sic, NimBLE's name)
+        ESP_LOGI(TAG, "pairing %s (%d)", event->pairing_complete.status == 0 ? "complete" : "failed",
+                 event->pairing_complete.status);
+        if (event->pairing_complete.status == 0) {
+            paired_now = true;
+            if (pairing()) {
+                pairing_until_us = 0;
+                ESP_LOGI(TAG, "pairing mode: a device paired; back to normal");
+            }
         }
         return 0;
     case BLE_GAP_EVENT_REPEAT_PAIRING:
@@ -592,6 +616,8 @@ void ble_forget(void)
 
 void ble_start(void)
 {
+    esp_timer_create_args_t rc = {.callback = reconnect_check_cb, .name = "pair_check"};
+    ESP_ERROR_CHECK(esp_timer_create(&rc, &reconnect_check));
     jobs = xQueueCreate(64, sizeof(job_t));
     xTaskCreate(typing_task, "typing", 4096, NULL, 6, NULL);
     if (vk_cfg.name[0]) {
