@@ -532,14 +532,14 @@ async def offer_updates_to_everyone():
 async def sync_releases_forever():
     if not GITHUB_REPO:
         return
-    previous = None
     while True:
         try:
             tag = await sync_releases()
             log.info("Client release %s is current", tag) if tag else log.info("No %s* release on %s yet", RELEASE_TAG_PREFIX, GITHUB_REPO)
-            if tag and previous and tag != previous and AUTO_UPDATE:
+            # After every sync, not only on a new tag: clients that connected while
+            # it was still downloading were offered nothing. Current ones ignore it.
+            if tag and AUTO_UPDATE:
                 await offer_updates_to_everyone()
-            previous = tag
         except Exception as e:  # GitHub unreachable or token missing; keep serving what we have.
             log.warning("Release sync failed: %s", e)
         await asyncio.sleep(RELEASE_SYNC_SECONDS)
