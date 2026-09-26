@@ -420,7 +420,8 @@ html.landscape .touchpad{display:none}
   html.landscape .app.touchpad-on{grid-template-rows:auto minmax(0,1fr) auto}
   html.landscape .app.touchpad-on .stage{flex-direction:column;align-items:stretch;gap:8px;padding:4px 0 8px;min-height:0}
   html.landscape .app.touchpad-on .touchpad{display:grid}
-  html.landscape .app.touchpad-on .stage .below{flex:none}
+  /* No status line: the touchpad takes the room; the toolbar's mic key shows dictation. */
+  html.landscape .app.touchpad-on .stage .below{display:none}
 }
 
 /* A phone or tablet held sideways: a slim status line, then a full-width
