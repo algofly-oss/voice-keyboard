@@ -814,7 +814,8 @@ async def backend_settings(request: Request):
 
 # Preferences of the account, shared by all its browsers: (name, type, default).
 ACCOUNT_PREFS = {"touchpad": (bool, True), "functionKeys": (bool, False), "reverseScroll": (bool, False),
-                 "bestAddress": (bool, True), "mouseButtons": (bool, False)}  # Settings → Fastest address, on every address of the server
+                 "bestAddress": (bool, True),   # Settings → Fastest address, on every address of the server
+                 "mouseButtons": (bool, True)}  # Settings → Mouse buttons under the touchpad
 
 
 def account_prefs(user) -> dict:
