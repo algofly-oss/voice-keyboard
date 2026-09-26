@@ -1016,7 +1016,8 @@ function resetWave(){history.fill(0);bars.forEach(b=>b.style.transform='');halo.
 
 mic.addEventListener('click',()=>state==='idle'?startDictation():state==='recording'?stopDictation():state==='remote'&&(sendEvent('stop'),say('Stopping the other device…')));
 $('#discard').addEventListener('click',()=>state==='remote'?(sendEvent('cancel'),say('Discarding on the other device…')):discardDictation());
-document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document.body&&!$('#sheet').open){e.preventDefault();mic.click()}});
+// Space dictates on a touch device's hardware keyboard; on a computer it types (see "System keyboard").
+document.addEventListener('keydown',e=>{if(touchDevice&&e.code==='Space'&&e.target===document.body&&!$('#sheet').open){e.preventDefault();mic.click()}});
 
 // ---------- Keys ----------
 // Keys and on-screen typing go out in order ("down", "hold" and "up" must
@@ -1103,6 +1104,38 @@ function holdToRepeat(btn){
 // A key pressed once (Enter), with the active modifiers.
 function pressOnce(b,name,withMods=true){b.addEventListener('pointerdown',e=>{e.preventDefault();if(b.disabled)return;
   sendKey(keyQuery((withMods?comboPrefix():'')+name));afterKey()})}
+
+// ---------- System keyboard ----------
+// On a computer, keys typed while this page has focus go to the client, as if
+// typed on the on-screen keyboard: characters as text, named keys held and
+// repeated, and Ctrl, Alt or ⌘ with a letter, digit or named key as one
+// combination. Not while typing in a field or with a dialog open. The browser
+// keeps a few combinations for itself (⌘W, ⌘T, ⌘Q, Ctrl+W, …).
+const SYS_KEYS={Backspace:'backspace',Enter:'enter',Tab:'tab',Escape:'escape',
+  ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down'};
+for(let i=1;i<=12;i++)SYS_KEYS['F'+i]='f'+i;
+const sysHeld=new Map();  // e.code → named key sent "down", until its keyup
+function sysKeyTarget(e){const t=e.target;
+  return !touchDevice&&!e.isComposing&&!document.querySelector('dialog[open]')
+    &&!(t instanceof HTMLElement&&(t.isContentEditable||t.closest('input,textarea,select')))}
+document.addEventListener('keydown',e=>{
+  if(!sysKeyTarget(e)||['Shift','Control','Alt','Meta','CapsLock','AltGraph','Fn'].includes(e.key))return;
+  const named=SYS_KEYS[e.key],chord=e.ctrlKey||e.altKey||e.metaKey;
+  const prefix=(e.ctrlKey?'ctrl+':'')+(e.altKey?'alt+':'')+(e.shiftKey?'shift+':'')+(e.metaKey?'meta+':'');
+  if(chord){  // by physical key: Option on a Mac changes e.key (⌥A is "å")
+    const m=/^(?:Key([A-Z])|Digit(\d))$/.exec(e.code),base=named||(m?(m[1]||m[2]).toLowerCase():e.code==='Space'?'space':'');
+    if(!base)return;
+    e.preventDefault();sendKey(keyQuery(prefix+base));return}
+  if(named&&e.shiftKey){e.preventDefault();sendKey(keyQuery('shift+'+named));return}  // Shift+Tab, Shift+arrows
+  if(named){e.preventDefault();
+    if(!e.repeat||!sysHeld.has(e.code)){sysHeld.set(e.code,named);sendKey(keyQuery(named)+'&s=down')}
+    else sendKey(keyQuery(named)+'&s=hold');
+    return}
+  if(e.key.length===1||[...e.key].length===1){e.preventDefault();typeText(e.key)}
+});
+function sysRelease(code){const named=sysHeld.get(code);if(!named)return;sysHeld.delete(code);sendKey(keyQuery(named)+'&s=up')}
+document.addEventListener('keyup',e=>sysRelease(e.code));
+addEventListener('blur',()=>[...sysHeld.keys()].forEach(sysRelease));  // a key held while switching windows
 
 // ---------- Full keyboard ----------
 // Layers as rows of keys: a character, or one of the function keys below.
