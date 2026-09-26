@@ -1099,9 +1099,16 @@ function applyTouchpad(){const on=isOn(cfg.touchpad);$('.app').classList.toggle(
   ['gesturestart','gesturechange','gestureend'].forEach(n=>pad.addEventListener(n,e=>e.preventDefault()));  // Safari pinch
   // A mouse (or a pen) on a computer: pointer events; touches are handled above.
   const mouse=e=>e.pointerType!=='touch';
-  pad.addEventListener('pointerdown',e=>{if(!mouse(e))return;e.preventDefault();try{pad.setPointerCapture(e.pointerId)}catch{}down('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
+  pad.addEventListener('pointerdown',e=>{if(!mouse(e))return;e.preventDefault();
+    // A mouse's right or middle button clicks that button on the device.
+    if(e.button===1||e.button===2){send({action:'click',button:e.button===2?'right':'middle'});return}
+    try{pad.setPointerCapture(e.pointerId)}catch{}down('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
+  // A mouse wheel (or a laptop's two-finger scroll) over the touchpad scrolls the device.
+  pad.addEventListener('wheel',e=>{e.preventDefault();
+    const perStep=e.deltaMode===1?3:e.deltaMode===2?0.1:100;  // lines, pages, or pixels per step
+    scroll.x+=e.deltaX/perStep;scroll.y+=e.deltaY/perStep;later()},{passive:false});
   pad.addEventListener('pointermove',e=>{if(mouse(e))moved('p'+e.pointerId,e.clientX,e.clientY,e.timeStamp)});
-  ['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,e=>{if(mouse(e))lifted('p'+e.pointerId,e.timeStamp)}));
+  ['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,e=>{if(mouse(e)&&e.button!==1&&e.button!==2)lifted('p'+e.pointerId,e.timeStamp)}));
   pad.addEventListener('contextmenu',e=>e.preventDefault());
 })();
 

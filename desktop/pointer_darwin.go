@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"math"
+	"time"
 
 	"github.com/ebitengine/purego"
 )
@@ -22,6 +24,17 @@ const (
 	cgEventOtherMouseDown = 25
 	cgEventOtherMouseUp   = 26
 	cgScrollEventUnitLine = 1
+
+	// CGEventField values
+	cgMouseEventClickState = 1 // 2 on the second click of a double click
+	cgMouseEventDeltaX     = 4 // the motion itself: the Dock and hot corners
+	cgMouseEventDeltaY     = 5 // react to pushing against a screen edge
+)
+
+// A second click within this time and distance is a double click (the macOS default is 0.5 s).
+const (
+	doubleClickTime = 500 * time.Millisecond
+	doubleClickPx   = 6
 )
 
 var (
@@ -29,11 +42,20 @@ var (
 	cgEventGetLocation        func(event uintptr) cgPoint
 	cgEventCreateMouseEvent   func(source uintptr, typ uint32, at cgPoint, button uint32) uintptr
 	cgEventCreateScrollWheel2 func(source uintptr, units uint32, wheelCount uint32, wheel1, wheel2, wheel3 int32) uintptr
+	cgEventSetIntegerField    func(event uintptr, field uint32, value int64)
 )
 
 // macPointer remembers a held button: while it is down, motion must be
 // posted as "dragged" events, or apps see a move without a drag.
-type macPointer struct{ down string }
+type macPointer struct {
+	down string
+	// Consecutive clicks: macOS counts a double click only from the click
+	// state in the events, which synthetic events leave at 1.
+	lastButton string
+	lastAt     time.Time
+	lastPoint  cgPoint
+	clicks     int64
+}
 
 func newPointer() (pointer, error) {
 	if err := load(); err != nil {
@@ -46,6 +68,7 @@ func newPointer() (pointer, error) {
 	purego.RegisterLibFunc(&cgEventCreate, cg, "CGEventCreate")
 	purego.RegisterLibFunc(&cgEventGetLocation, cg, "CGEventGetLocation")
 	purego.RegisterLibFunc(&cgEventCreateMouseEvent, cg, "CGEventCreateMouseEvent")
+	purego.RegisterLibFunc(&cgEventSetIntegerField, cg, "CGEventSetIntegerValueField")
 	// The older CGEventCreateScrollWheelEvent is variadic; this one needs macOS 13.
 	if _, err := purego.Dlsym(cg, "CGEventCreateScrollWheelEvent2"); err == nil {
 		purego.RegisterLibFunc(&cgEventCreateScrollWheel2, cg, "CGEventCreateScrollWheelEvent2")
@@ -84,14 +107,19 @@ func (p *macPointer) Move(dx, dy int) error {
 	case "middle":
 		kind, button = cgEventOtherDragged, 2
 	}
-	return post(cgEventCreateMouseEvent(0, kind, at, button))
+	event := cgEventCreateMouseEvent(0, kind, at, button)
+	if event != 0 {
+		cgEventSetIntegerField(event, cgMouseEventDeltaX, int64(dx))
+		cgEventSetIntegerField(event, cgMouseEventDeltaY, int64(dy))
+	}
+	return post(event)
 }
 
 func (p *macPointer) Click(button string) error {
 	if err := allowed(); err != nil {
 		return err
 	}
-	if err := p.Press(button); err != nil {
+	if err := p.press(button, true); err != nil {
 		return err
 	}
 	return p.Release(button)
@@ -104,13 +132,25 @@ var macButtons = map[string][3]uint32{
 	"middle": {cgEventOtherMouseDown, cgEventOtherMouseUp, 2},
 }
 
-func (p *macPointer) Press(button string) error {
+// Press starts a drag: always a single click, or a drag right after a tap
+// would be a double-click drag (selecting words, zooming a window).
+func (p *macPointer) Press(button string) error { return p.press(button, false) }
+
+func (p *macPointer) press(button string, counted bool) error {
 	if err := allowed(); err != nil {
 		return err
 	}
 	b := macButtons[button]
 	p.down = button
-	return post(cgEventCreateMouseEvent(0, b[0], location(), b[2]))
+	at := location()
+	near := math.Abs(at.X-p.lastPoint.X) <= doubleClickPx && math.Abs(at.Y-p.lastPoint.Y) <= doubleClickPx
+	if counted && button == p.lastButton && near && time.Since(p.lastAt) < doubleClickTime {
+		p.clicks++
+	} else {
+		p.clicks = 1
+	}
+	p.lastButton, p.lastAt, p.lastPoint = button, time.Now(), at
+	return post(p.withClicks(cgEventCreateMouseEvent(0, b[0], at, b[2])))
 }
 
 func (p *macPointer) Release(button string) error {
@@ -121,7 +161,14 @@ func (p *macPointer) Release(button string) error {
 	if p.down == button {
 		p.down = ""
 	}
-	return post(cgEventCreateMouseEvent(0, b[1], location(), b[2]))
+	return post(p.withClicks(cgEventCreateMouseEvent(0, b[1], location(), b[2])))
+}
+
+func (p *macPointer) withClicks(event uintptr) uintptr {
+	if event != 0 {
+		cgEventSetIntegerField(event, cgMouseEventClickState, max(1, p.clicks))
+	}
+	return event
 }
 
 func (p *macPointer) Scroll(dx, dy int) error {
