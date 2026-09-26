@@ -477,7 +477,7 @@ html.landscape .vkb{align-self:end;--kh:clamp(28px,calc((100dvh - 150px) / 5.9),
     <div class="chips">
       <span class="chip" id="serverChip" data-state="wait" role="img" aria-label="Server status"><i data-i="server"></i></span>
       <!-- Client status by colour. With an ESP32 active, a tap turns its Bluetooth keyboard off or on. -->
-      <button class="chip chip-btn" id="desktopChip" type="button" data-state="wait" aria-label="Client status"><i data-i="keyboard"></i></button>
+      <button class="chip chip-btn" id="desktopChip" type="button" data-state="wait" aria-label="Client status"><i data-i="monitor"></i></button>
       <!-- A phone held sideways has room for the keyboard or the touchpad: this switches. -->
       <button class="chip chip-btn toggle" id="viewChip" type="button" aria-label="Show the touchpad"><i data-i="touchpad"></i></button>
     </div>
@@ -774,8 +774,9 @@ async function pollDevice(){
   setChip(chip,off?'ok':ready?'ok':sel?'wait':'bad',sel?sel.name:'No client',
     espActive&&!off?status+'. Tap to disconnect the Bluetooth keyboard (the device then shows its on-screen keyboard)':status);
   chip.classList.toggle('toggle',espActive);chip.classList.toggle('kb-off',off);
-  // An ESP32 is a Bluetooth keyboard: its chip shows Bluetooth, which a tap turns off or on.
-  chip.querySelector('svg').innerHTML=ICONS[/^esp32/i.test(sel?.platform||'')?(off?'bluetoothOff':'bluetooth'):'keyboard'];
+  // The client that types: a computer, or an ESP32's Bluetooth keyboard, which a tap turns
+  // off or on. (The keyboard icon is the phone-landscape keyboard/touchpad switch.)
+  chip.querySelector('svg').innerHTML=ICONS[/^esp32/i.test(sel?.platform||'')?(off?'bluetoothOff':'bluetooth'):'monitor'];
   renderDevices(deviceStatus.devices);lockKeys(!sel?.online);modLabels();window.renderBoard?.();
 }
 async function checkServer(url){
