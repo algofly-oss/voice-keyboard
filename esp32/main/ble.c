@@ -136,6 +136,7 @@ static const char *disconnect_reason(int reason)
 
 static int64_t connected_at_us;
 static uint16_t conn_handle;
+static int64_t report_every_us = 15 * 1000LL;  // the connection interval: a pointer report each
 static volatile int8_t last_rssi;  // read every second while connected; logged when the link drops
 
 static void advertise(void)
@@ -252,6 +253,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_CONN_UPDATE:
         if (ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
             ESP_LOGI(TAG, "connection interval %d.%02d ms", desc.conn_itvl * 125 / 100, desc.conn_itvl * 125 % 100);
+            report_every_us = desc.conn_itvl * 1250LL;
         }
         return 0;
     case BLE_GAP_EVENT_PARING_COMPLETE:  // (sic, NimBLE's name)
@@ -361,17 +363,78 @@ static int8_t step(int *rest)
     return (int8_t)s;
 }
 
+// Touchpad motion, played out evenly. Wi-Fi shares the radio with Bluetooth,
+// which holds it for ~60 ms of every ~100 ms while connected, so moves sent
+// at 60 per second arrive in bursts ten times a second. Sent as they come, the
+// pointer would jump at that rate; instead each burst is spread, one report per
+// connection interval, over the time until the next burst is expected. That
+// time follows the gaps seen: ~100 ms on such a link, down to a frame on a
+// smooth one.
+#define PACE_MIN_US (16 * 1000LL)
+#define PACE_MAX_US (120 * 1000LL)
+#define GESTURE_GAP_US (300 * 1000LL)  // a longer pause starts another movement
+static int pending_dx, pending_dy;
+static int64_t pace_horizon_us = 100 * 1000LL;  // expected time until the next moves
+static int64_t pace_deadline_us;                // all pending motion out by then
+static int64_t next_report_us;
+static int64_t last_move_us;
+
+static void pace_add(int dx, int dy, int64_t now)
+{
+    int64_t gap = now - last_move_us;
+    last_move_us = now;
+    if (gap < GESTURE_GAP_US) {  // up at once to a longer gap, down slowly
+        int64_t h = pace_horizon_us - gap / 4;
+        pace_horizon_us = gap > h ? gap : h;
+        pace_horizon_us = pace_horizon_us < PACE_MIN_US ? PACE_MIN_US
+                        : pace_horizon_us > PACE_MAX_US ? PACE_MAX_US : pace_horizon_us;
+    }
+    if (!pending_dx && !pending_dy && next_report_us < now) {
+        next_report_us = now;  // the first report of a movement goes out at once
+    }
+    pending_dx += dx;
+    pending_dy += dy;
+    pace_deadline_us = now + pace_horizon_us;
+}
+
+// One report's share of the pending motion: what is left, divided over the
+// reports that fit before the deadline (a report carries at most ±127 per axis).
+static void pace_report(int64_t now)
+{
+    int64_t reports = (pace_deadline_us - now) / report_every_us;
+    int n = reports < 1 ? 1 : (int)reports;
+    int x = pending_dx / n, y = pending_dy / n;
+    if (!x && !y) {  // less than one count per report: move one count at a time
+        x = (pending_dx > 0) - (pending_dx < 0);
+        y = (pending_dy > 0) - (pending_dy < 0);
+    }
+    x = x > 127 ? 127 : x < -127 ? -127 : x;
+    y = y > 127 ? 127 : y < -127 ? -127 : y;
+    pending_dx -= x;
+    pending_dy -= y;
+    send_mouse(held_buttons, (int8_t)x, (int8_t)y, 0, 0);
+    next_report_us = now + report_every_us;
+}
+
+// Clicks, drags and scrolling wait for the motion before them.
+static void pace_flush(void)
+{
+    while (pending_dx || pending_dy) {
+        int8_t x = step(&pending_dx), y = step(&pending_dy);
+        send_mouse(held_buttons, x, y, 0, 0);
+    }
+}
+
 static void pointer_job(const job_t *job)
 {
     int dx = job->dx, dy = job->dy;
     last_pointer_us = esp_timer_get_time();
+    if (job->state == 'm') {
+        pace_add(dx, dy, last_pointer_us);
+        return;
+    }
+    pace_flush();
     switch (job->state) {
-    case 'm':  // a report carries at most ±127 per axis
-        while (dx || dy) {
-            int8_t x = step(&dx), y = step(&dy);
-            send_mouse(held_buttons, x, y, 0, 0);
-        }
-        break;
     case 'c':
         send_mouse(held_buttons | job->buttons, 0, 0, 0, 0);
         send_mouse(held_buttons, 0, 0, 0, 0);
@@ -469,7 +532,22 @@ static void typing_task(void *arg)
 {
     job_t job;
     for (;;) {
-        if (xQueueReceive(jobs, &job, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        TickType_t wait = pdMS_TO_TICKS(1000);
+        if (pending_dx || pending_dy) {
+            int64_t now = esp_timer_get_time();
+            if (!connected) {
+                pending_dx = pending_dy = 0;
+            } else if (now >= next_report_us) {
+                pace_report(now);
+                continue;
+            } else {
+                wait = pdMS_TO_TICKS((next_report_us - now + 999) / 1000);
+            }
+        }
+        if (xQueueReceive(jobs, &job, wait) != pdTRUE) {
+            if (pending_dx || pending_dy) {
+                continue;  // time for the next report
+            }
             if (pairing_until_us && !pairing()) {  // the window ended without a new device
                 pairing_until_us = 0;
                 ESP_LOGI(TAG, "pairing mode ended");

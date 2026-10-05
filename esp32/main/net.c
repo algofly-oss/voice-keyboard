@@ -1016,4 +1016,11 @@ void net_start(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     xTaskCreate(net_task, "net", 6144, NULL, 5, NULL);
     ESP_ERROR_CHECK(esp_wifi_start());  // also when unconfigured, so the page can scan
+    // No modem sleep: asleep, the radio wakes only for the router's beacons
+    // (~100 ms), so touchpad motion arrives in bursts and the pointer jumps.
+    // The board runs on USB power.
+    esp_err_t ps = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (ps != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi power saving stays on: %s", esp_err_to_name(ps));
+    }
 }
