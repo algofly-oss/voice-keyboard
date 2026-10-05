@@ -69,12 +69,14 @@ const char *vk_machine_id(void);
 void net_ble_changed(void);  // tells the server whether a computer is connected over Bluetooth
 void net_report_log(const char *line);  // a log line for the server (errors always, the rest for a live log)
 bool net_log_streaming(void);           // the web app's live log is open
+void net_activity(void);                // in use: full speed for a while (see net.c, power saving)
 
 // Bluetooth LE keyboard.
 void ble_start(void);
 void ble_set_name(const char *name);
 void ble_forget(void);
 void ble_set_enabled(bool on);
+void ble_set_fast(bool on);  // the short connection interval (in use) or a longer one (idle)
 void ble_pairing_mode(int seconds);  // drop the connection; refuse paired devices until a new one pairs  // off: disconnect and stop advertising, until on (or a restart)
 void ble_type(const char *text);             // queued; typed in order
 void ble_key(const char *key, const char *state);

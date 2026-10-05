@@ -1019,6 +1019,7 @@ async def keyboard(ws: WebSocket):
     server -> {"type":"ready","device":7,"client":"<name>","credential":"…","selected":true,
                "urls":["https://192.168.1.10","https://vk.example.com"],"instance":"…","ca":"<PEM or empty>"}
     server -> {"type":"selected","selected":false}      when the user picks another computer
+    server -> {"type":"wake"}  a web UI opened or was touched: input is likely (an ESP32 leaves power saving)
     server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
     server -> {"type":"update","version":"1.5.3","url":"/client/…","sha256":"…","size":…,"manual":false}
               a newer build: the desktop client installs it and restarts
@@ -1270,6 +1271,7 @@ async def events(ws: WebSocket):
               {"type":"pointer","action":"click"|"press"|"release","button":"left"|"right"|"middle"}
               (press/release: a held button, for dragging)
               from the touchpad, passed on to the active client
+    client -> {"type":"wake"}  the page was opened or touched; passed on to the active client
     """
     await ws.accept()  # Accept first so the browser sees the 4401 close code.
     if not (user := ws_user(ws)):
@@ -1294,6 +1296,8 @@ async def events(ws: WebSocket):
                 # The room itself, not room_for(user): this user row is from when the
                 # page connected, and would put back the client selected then.
                 await send_pointer(room, message)
+            elif kind == "wake":
+                await send_pointer(room, {"type": "wake"})  # not queued: stale by the time it reconnects
     except Exception:
         pass
     finally:

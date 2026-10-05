@@ -996,10 +996,18 @@ function caption(piece,reset){
 // ---------- Sync with other open web UIs ----------
 const clientId=crypto.randomUUID?.()||String(Math.random()).slice(2);
 let events=null,remote=null;
+// An ESP32 board saves power when left alone; this hint, as the page opens or is
+// touched, brings it to full speed before the first key or touchpad stroke.
+let lastWake=0;
+function wakeKeyboard(){if(document.hidden||events?.readyState!==1||Date.now()-lastWake<30000)return;
+  lastWake=Date.now();events.send('{"type":"wake"}')}
+['pointerdown','keydown','touchstart'].forEach(t=>addEventListener(t,wakeKeyboard,{capture:true,passive:true}));
+document.addEventListener('visibilitychange',wakeKeyboard);
 function connectEvents(){
   if(!cfg.serverUrl||(location.protocol==='https:'&&serverUrl('').protocol==='http:'))return;
   const u=serverUrl('/v1/events');u.protocol=u.protocol==='https:'?'wss:':'ws:';
   let e;try{e=events=new WebSocket(u)}catch{return}
+  e.onopen=()=>{lastWake=0;wakeKeyboard()};
   e.onmessage=ev=>{const m=JSON.parse(ev.data);if(m.type==='devices')return pollDevice();
     if(m.type==='device-log'){window.boardLine?.(m);return}
     if(m.type==='prefs'){  // changed in another browser (or this one): apply at once

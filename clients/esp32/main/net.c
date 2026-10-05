@@ -5,6 +5,7 @@
 //   server -> {"type":"ready","device":7,"credential":"…","selected":true,"urls":[…],"ca":"…"}
 //   server -> {"type":"selected","selected":false}
 //   server -> {"type":"segment","text":"…"} / {"type":"key","key":"enter","state":"press"}
+//   server -> {"type":"wake"}  the web app opened or was touched: full speed (power saving)
 // The first connection uses the account's install token; the credential in
 // "ready" replaces it, so a new install token later does not unpair the board.
 //
@@ -58,6 +59,10 @@ static const char *TAG = "net";
 #define LOCAL_BACKOFF_MS (60 * 1000)         // after a local address failed (a server restart fails every address)
 #define FAILOVER_AFTER 3                     // failed attempts before trying another address
 #define MAX_ADDRESSES 6
+// Power saving: left alone this long, Wi-Fi sleeps between the router's beacons
+// and Bluetooth slows down, so the board runs cooler. Typing, the touchpad, or
+// the web app opening (it sends "wake") bring full speed back at once.
+#define IDLE_AFTER_MS (5 * 60 * 1000)
 
 typedef enum {
     EV_WIFI_UP,
@@ -72,6 +77,7 @@ typedef enum {
     EV_PING,         // heartbeat timer
     EV_LOG,          // lines for an open live log
     EV_FAILED,       // a connection attempt failed
+    EV_WAKE,         // input after a quiet spell: full speed
 } net_event_t;
 
 static QueueHandle_t events;
@@ -87,6 +93,8 @@ static int failures;                     // failed attempts on it in a row
 static int64_t local_failed_us;          // when a local address last failed
 static char machine[32];
 static volatile bool ready;  // the server accepted us ("ready"); status messages may go out
+static volatile int64_t last_activity_us;
+static volatile bool full_speed;  // set at start, then by net_task only
 
 // Received message being reassembled from frames.
 static char *message;
@@ -624,6 +632,27 @@ static void learn_addresses(cJSON *m)
     }
 }
 
+void net_activity(void)
+{
+    last_activity_us = esp_timer_get_time();
+    if (!full_speed) {
+        post(EV_WAKE);
+    }
+}
+
+static void set_full_speed(bool on)
+{
+    full_speed = on;
+    // Asleep, the radio wakes only for the router's beacons (~100 ms), so
+    // touchpad motion would arrive in bursts and the pointer jump.
+    esp_err_t ps = esp_wifi_set_ps(on ? WIFI_PS_NONE : WIFI_PS_MIN_MODEM);
+    if (ps != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi power saving not changed: %s", esp_err_to_name(ps));
+    }
+    ble_set_fast(on);
+    ESP_LOGI(TAG, "%s", on ? "in use: full speed" : "idle: power saving");
+}
+
 static void handle_message(const char *text)
 {
     cJSON *m = cJSON_Parse(text);
@@ -631,6 +660,10 @@ static void handle_message(const char *text)
     if (!type) {
         cJSON_Delete(m);
         return;
+    }
+    if (strcmp(type, "segment") == 0 || strcmp(type, "key") == 0 || strcmp(type, "pointer") == 0 ||
+        strcmp(type, "wake") == 0 || (strcmp(type, "selected") == 0 && cJSON_IsTrue(cJSON_GetObjectItem(m, "selected")))) {
+        net_activity();
     }
     if (strcmp(type, "segment") == 0) {
         const char *t = cJSON_GetStringValue(cJSON_GetObjectItem(m, "text"));
@@ -949,7 +982,15 @@ static void net_task(void *arg)
             log_send_pending = false;
             send_log_reports();
             break;
+        case EV_WAKE:
+            if (!full_speed) {
+                set_full_speed(true);
+            }
+            break;
         case EV_PING:
+            if (full_speed && esp_timer_get_time() - last_activity_us > IDLE_AFTER_MS * 1000LL) {
+                set_full_speed(false);
+            }
             if (!ws || !ready) {
                 break;
             }
@@ -1016,11 +1057,6 @@ void net_start(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     xTaskCreate(net_task, "net", 6144, NULL, 5, NULL);
     ESP_ERROR_CHECK(esp_wifi_start());  // also when unconfigured, so the page can scan
-    // No modem sleep: asleep, the radio wakes only for the router's beacons
-    // (~100 ms), so touchpad motion arrives in bursts and the pointer jumps.
-    // The board runs on USB power.
-    esp_err_t ps = esp_wifi_set_ps(WIFI_PS_NONE);
-    if (ps != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi power saving stays on: %s", esp_err_to_name(ps));
-    }
+    last_activity_us = esp_timer_get_time();  // full speed after a restart, until left alone
+    set_full_speed(true);
 }

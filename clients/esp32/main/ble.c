@@ -139,6 +139,34 @@ static uint16_t conn_handle;
 static int64_t report_every_us = 15 * 1000LL;  // the connection interval: a pointer report each
 static volatile int8_t last_rssi;  // read every second while connected; logged when the link drops
 
+// In use, the shortest connection interval the host allows (7.5 ms; Apple
+// devices take 15 ms): it sets the typing speed. Idle, a longer one, and the
+// board may skip events with nothing to send: the radio wakes far less often.
+// The first keystroke still goes out within 50 ms, and wakes it (net.c).
+static volatile bool fast = true;
+
+static void request_interval(uint16_t handle)
+{
+    struct ble_gap_upd_params p = {.itvl_min = 6, .itvl_max = 12, .latency = 0, .supervision_timeout = 400};
+    if (!fast) {
+        p.itvl_min = 24;  // 30 ms
+        p.itvl_max = 40;  // 50 ms
+        p.latency = 4;
+    }
+    ble_gap_update_params(handle, &p);
+}
+
+void ble_set_fast(bool on)
+{
+    if (fast == on) {
+        return;
+    }
+    fast = on;
+    if (connected) {
+        request_interval(conn_handle);
+    }
+}
+
 static void advertise(void)
 {
     if (!enabled) {
@@ -242,12 +270,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             snprintf(s->ble_peer, sizeof s->ble_peer, "%02X:%02X:%02X:%02X:%02X:%02X",
                      a[5], a[4], a[3], a[2], a[1], a[0]);
             status_end();
-            // Ask for the shortest connection interval the host allows
-            // (7.5 ms; Apple devices take 15 ms): it sets the typing speed.
-            struct ble_gap_upd_params fast = {
-                .itvl_min = 6, .itvl_max = 12, .latency = 0, .supervision_timeout = 400,
-            };
-            ble_gap_update_params(event->enc_change.conn_handle, &fast);
+            request_interval(event->enc_change.conn_handle);
         }
         return 0;
     case BLE_GAP_EVENT_CONN_UPDATE:
