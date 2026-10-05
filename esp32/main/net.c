@@ -28,6 +28,7 @@
 #include "esp_app_desc.h"
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
@@ -723,20 +724,29 @@ static void on_ws(void *arg, esp_event_base_t base, int32_t id, void *data)
             break;  // ping, pong, binary
         }
         if (e->payload_offset == 0) {
+            // Sized to this message: an ESP32-C3 running Wi-Fi, Bluetooth and TLS
+            // has no 32 KB block to spare, and without "ready" it never pairs.
+            free(message);
+            message = NULL;
             message_len = 0;
+            if (e->payload_len > MESSAGE_MAX) {
+                ESP_LOGW(TAG, "dropped a message of %d bytes: too long", e->payload_len);
+                break;
+            }
+            message = malloc(e->payload_len + 1);
+            if (!message) {
+                ESP_LOGE(TAG, "dropped a message of %d bytes: out of memory (largest free block %u)",
+                         e->payload_len, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+            }
         }
-        if (e->payload_len > MESSAGE_MAX) {
-            break;
-        }
-        if (!message) {
-            message = malloc(MESSAGE_MAX + 1);
-        }
-        if (message && e->payload_offset + e->data_len <= MESSAGE_MAX) {
+        if (message && e->payload_offset + e->data_len <= e->payload_len) {
             memcpy(message + e->payload_offset, e->data_ptr, e->data_len);
             message_len = e->payload_offset + e->data_len;
             if (message_len >= (size_t)e->payload_len) {
                 message[message_len] = '\0';
                 handle_message(message);
+                free(message);  // a long dictation would otherwise keep its memory
+                message = NULL;
             }
         }
         break;
