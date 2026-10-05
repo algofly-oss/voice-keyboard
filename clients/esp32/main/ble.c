@@ -140,14 +140,21 @@ static int64_t report_every_us = 15 * 1000LL;  // the connection interval: a poi
 static volatile int8_t last_rssi;  // read every second while connected; logged when the link drops
 
 // In use, the shortest connection interval the host allows (7.5 ms; Apple
-// devices take 15 ms): it sets the typing speed. Idle, a longer one, and the
+// devices refuse that, and get 15 ms on the next try): it sets the typing speed. Idle, a longer one, and the
 // board may skip events with nothing to send: the radio wakes far less often.
 // The first keystroke still goes out within 50 ms, and wakes it (net.c).
 static volatile bool fast = true;
+// The host may refuse a change (busy with another procedure) or pick another
+// interval: asked again a few times, so a refusal does not leave it slow.
+#define INTERVAL_TRIES 3
+static esp_timer_handle_t interval_retry;
+static int interval_tries;
+static bool apple_interval;  // the host refused 7.5 ms; ask for exactly 15 (Apple's minimum)
 
 static void request_interval(uint16_t handle)
 {
-    struct ble_gap_upd_params p = {.itvl_min = 6, .itvl_max = 12, .latency = 0, .supervision_timeout = 400};
+    struct ble_gap_upd_params p = {.itvl_min = apple_interval ? 12 : 6, .itvl_max = 12, .latency = 0,
+                                   .supervision_timeout = 400};
     if (!fast) {
         p.itvl_min = 24;  // 30 ms
         p.itvl_max = 40;  // 50 ms
@@ -162,6 +169,14 @@ void ble_set_fast(bool on)
         return;
     }
     fast = on;
+    interval_tries = 0;
+    if (connected) {
+        request_interval(conn_handle);
+    }
+}
+
+static void interval_retry_cb(void *arg)
+{
     if (connected) {
         request_interval(conn_handle);
     }
@@ -231,6 +246,8 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             ESP_LOGW(TAG, "Bluetooth: connected to %s device (signal %d dBm)", bonded ? "a paired" : "a new", rssi);
             connected_at_us = esp_timer_get_time();
             conn_handle = event->connect.conn_handle;
+            interval_tries = 0;
+            apple_interval = false;
             last_rssi = rssi;
             connected = true;
             paired_now = false;
@@ -275,8 +292,20 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         return 0;
     case BLE_GAP_EVENT_CONN_UPDATE:
         if (ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
-            ESP_LOGI(TAG, "connection interval %d.%02d ms", desc.conn_itvl * 125 / 100, desc.conn_itvl * 125 % 100);
+            if (event->conn_update.status != 0) {
+                apple_interval = apple_interval || fast;
+                ESP_LOGI(TAG, "connection interval change refused (%d); still %d.%02d ms", event->conn_update.status,
+                         desc.conn_itvl * 125 / 100, desc.conn_itvl * 125 % 100);
+            } else {
+                ESP_LOGI(TAG, "connection interval %d.%02d ms", desc.conn_itvl * 125 / 100, desc.conn_itvl * 125 % 100);
+            }
             report_every_us = desc.conn_itvl * 1250LL;
+            bool off = fast ? desc.conn_itvl > 12 : desc.conn_itvl < 24;
+            if (off && connected && interval_tries < INTERVAL_TRIES) {
+                interval_tries++;
+                esp_timer_stop(interval_retry);
+                esp_timer_start_once(interval_retry, 2000 * 1000);
+            }
         }
         return 0;
     case BLE_GAP_EVENT_PARING_COMPLETE:  // (sic, NimBLE's name)
@@ -769,6 +798,8 @@ void ble_start(void)
 {
     esp_timer_create_args_t rc = {.callback = reconnect_check_cb, .name = "pair_check"};
     ESP_ERROR_CHECK(esp_timer_create(&rc, &reconnect_check));
+    esp_timer_create_args_t ir = {.callback = interval_retry_cb, .name = "ble_interval"};
+    ESP_ERROR_CHECK(esp_timer_create(&ir, &interval_retry));
     jobs = xQueueCreate(64, sizeof(job_t));
     xTaskCreate(typing_task, "typing", 4096, NULL, 6, NULL);
     if (vk_cfg.name[0]) {
