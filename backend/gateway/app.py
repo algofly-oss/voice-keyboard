@@ -86,7 +86,7 @@ WINDOW_MS = WINDOW * 1000 / SAMPLE_RATE
 MIN_SPEECH_MS = 250                 # utterances with less speech than this are dropped
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "static"
-CLIENT_DIR = BASE_DIR / "desktop"
+INSTALLERS_DIR = BASE_DIR / "installers"
 RELEASES_DIR = Path(os.environ.get("RELEASES_DIR", "/data/releases"))
 WEB_SOURCE = Path(os.environ.get("WEB_SOURCE", "/opt/web/index.html"))
 # Every address of this deployment (VK_URLS, comma-separated), e.g. the LAN
@@ -956,24 +956,24 @@ async def update_account(request: Request, response: Response):
 
 @app.get("/client/install.sh", include_in_schema=False)
 async def install_sh():
-    return FileResponse(CLIENT_DIR / "install.sh", media_type="text/plain")
+    return FileResponse(INSTALLERS_DIR / "install.sh", media_type="text/plain")
 
 
 @app.get("/client/trust-ca.sh", include_in_schema=False)
 async def trust_ca_sh():
-    return FileResponse(CLIENT_DIR / "trust-ca.sh", media_type="text/plain")
+    return FileResponse(INSTALLERS_DIR / "trust-ca.sh", media_type="text/plain")
 
 
 @app.get("/client/trust-ca.ps1", include_in_schema=False)
 async def trust_ca_ps1(request: Request):
     """Filled in with the address it was fetched from, so `irm … | iex` needs no argument."""
-    script = (CLIENT_DIR / "trust-ca.ps1").read_text().replace("__VK_SERVER__", public_base_url(request))
+    script = (INSTALLERS_DIR / "trust-ca.ps1").read_text().replace("__VK_SERVER__", public_base_url(request))
     return Response(script, media_type="text/plain")
 
 
 @app.get("/client/install.ps1", include_in_schema=False)
 async def install_ps1():
-    return FileResponse(CLIENT_DIR / "install.ps1", media_type="text/plain")
+    return FileResponse(INSTALLERS_DIR / "install.ps1", media_type="text/plain")
 
 
 @app.get("/client/{name}", include_in_schema=False)
