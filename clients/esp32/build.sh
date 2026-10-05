@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Builds the firmware in Espressif's Docker image (no local toolchain) and
 # writes one merged image per chip, flashed at offset 0 by the setup page
-# (an update skips 0x9000-0x10000, the settings, see web/esp32.html):
-#   esp32/dist/vkeyboard-esp32.bin, esp32/dist/vkeyboard-esp32c3.bin
-# Usage: esp32/build.sh [version] [chip ...]
+# (an update skips 0x9000-0x10000, the settings, see clients/web/esp32.html):
+#   clients/esp32/dist/vkeyboard-esp32.bin, clients/esp32/dist/vkeyboard-esp32c3.bin
+# Usage: clients/esp32/build.sh [version] [chip ...]
 set -euo pipefail
 cd "$(dirname "$0")"
 VERSION="${1:-dev}"

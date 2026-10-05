@@ -136,7 +136,7 @@ vkeyboard status   # connected? selected to type?  Also: logs, stop, start, unin
 ```
 
 On macOS, allow it under **Privacy & Security → Accessibility** when prompted.
-Details are in [desktop/README.md](desktop/README.md).
+Details are in [clients/desktop/README.md](clients/desktop/README.md).
 
 ## 5. Or use an ESP32 board as a Bluetooth keyboard
 
@@ -154,7 +154,7 @@ changes the settings later, without removing the pairing.
 
 It types what a US keyboard layout can type: accented Latin letters become
 plain ones (é → e), and other scripts are skipped. The firmware is in
-[esp32/](esp32/README.md), and `tools/release.sh` publishes it with the desktop
+[clients/esp32/](clients/esp32/README.md), and `tools/release.sh` publishes it with the desktop
 client.
 
 ## Configuration

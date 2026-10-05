@@ -108,7 +108,7 @@ def local_ca_pem() -> str:
         return ""
     return pem if "BEGIN CERTIFICATE" in pem else ""
 if not WEB_SOURCE.exists():
-    WEB_SOURCE = BASE_DIR.parent.parent / "web" / "index.html"
+    WEB_SOURCE = BASE_DIR.parent.parent / "clients" / "web" / "index.html"
 
 
 class Policy(NamedTuple):

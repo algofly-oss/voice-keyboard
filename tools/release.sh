@@ -9,21 +9,21 @@ version=${1:?usage: $0 <version, e.g. 1.0.0>}
 tag="v$version"
 cd "$(dirname "$0")/.."
 
-[ -z "$(git status --porcelain -- desktop esp32)" ] || { echo "Commit desktop/ and esp32/ changes first" >&2; exit 1; }
+[ -z "$(git status --porcelain -- clients)" ] || { echo "Commit clients/ changes first" >&2; exit 1; }
 git fetch -q origin
 [ "$(git rev-parse HEAD)" = "$(git rev-parse '@{u}')" ] || { echo "Push your branch first" >&2; exit 1; }
 
 out=$(mktemp -d)
 # Pure-Go builds (no cgo), so all six cross-compile from one machine.
-(cd desktop && for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+(cd clients/desktop && for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   goos=${target%/*}; goarch=${target#*/}; ext=""; ldflags="-s -w -X main.version=$version"
   [ "$goos" = windows ] && ext=.exe && ldflags="$ldflags -H windowsgui"
   CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -trimpath -ldflags "$ldflags" -o "$out/vkeyboard-$goos-$goarch$ext" .
 done)
 # macOS: our own certificate, so an updated client keeps its Accessibility permission.
 tools/macos-sign.sh "$out/vkeyboard-darwin-amd64" "$out/vkeyboard-darwin-arm64"
-esp32/build.sh "$version"
-cp esp32/dist/vkeyboard-esp32.bin esp32/dist/vkeyboard-esp32c3.bin "$out"/
+clients/esp32/build.sh "$version"
+cp clients/esp32/dist/vkeyboard-esp32.bin clients/esp32/dist/vkeyboard-esp32c3.bin "$out"/
 
 git tag -a "$tag" -m "Voice Keyboard $version"
 # Push with the gh login: a plain git push may pick up an older credential

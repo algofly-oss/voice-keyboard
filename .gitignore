@@ -3,6 +3,6 @@ backend/.env.migrated
 backend/volumes/
 *.pyc
 __pycache__/
-desktop/vkeyboard
-desktop/vkeyboard-*
+clients/desktop/vkeyboard
+clients/desktop/vkeyboard-*
 .env

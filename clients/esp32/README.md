@@ -25,12 +25,12 @@ a public address, and falls back to a public one after three failed attempts
 ## Build
 
 ```bash
-esp32/build.sh            # dev build of both chips, in Docker (espressif/idf:v5.4.2)
-esp32/build.sh 1.3.0 esp32c3
+clients/esp32/build.sh    # dev build of both chips, in Docker (espressif/idf:v5.4.2)
+clients/esp32/build.sh 1.3.0 esp32c3
 ```
 
 Each chip gets one merged image, flashed at offset 0:
-`esp32/dist/vkeyboard-esp32.bin` and `esp32/dist/vkeyboard-esp32c3.bin`.
+`clients/esp32/dist/vkeyboard-esp32.bin` and `clients/esp32/dist/vkeyboard-esp32c3.bin`.
 `tools/release.sh` builds them and attaches them to the GitHub release; the
 gateway mirrors them into `RELEASES_DIR/firmware/` and serves them at
 `/client/vkeyboard-<chip>.bin`. To test a build without a release, copy it to

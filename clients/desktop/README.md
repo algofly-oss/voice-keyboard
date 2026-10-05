@@ -98,7 +98,7 @@ libraries are loaded at run time with [purego](https://github.com/ebitengine/pur
 The only other dependency is [coder/websocket](https://github.com/coder/websocket).
 
 ```bash
-cd desktop
+cd clients/desktop
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o vkeyboard .
 # Windows: add -H windowsgui so the login item has no console window
 ```
